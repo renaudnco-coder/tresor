@@ -180,6 +180,23 @@
 
   /* confetti */
   .confetti{position:fixed;top:-10px;width:9px;height:14px;z-index:80;pointer-events:none;border-radius:2px}
+
+  /* MIC FAB */
+  .fab-wrap{position:fixed;bottom:104px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;pointer-events:none;z-index:41;display:flex;justify-content:flex-end;padding:0 18px}
+  .mic-fab{pointer-events:auto;width:52px;height:52px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--violet),var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 24px -6px rgba(167,139,250,.6);transition:transform .15s}
+  .mic-fab:active{transform:scale(.92)}
+  .mic-fab svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+  /* VOICE OVERLAY */
+  .voice{position:fixed;inset:0;z-index:75;background:rgba(10,12,18,.92);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center}
+  .voice.on{display:flex}
+  .vmic{width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-size:46px;margin-bottom:26px;position:relative}
+  .vmic::before,.vmic::after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid var(--violet);animation:ripple 1.8s ease-out infinite}
+  .vmic::after{animation-delay:.9s}
+  @keyframes ripple{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.8);opacity:0}}
+  .vtxt{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin-bottom:12px;min-height:30px}
+  .vhint{color:var(--muted);font-size:14px;max-width:280px;line-height:1.5}
+  .vclose{margin-top:30px;background:var(--card);border:1px solid var(--line);color:var(--text);padding:12px 26px;border-radius:50px;font-family:'Inter',sans-serif;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -286,6 +303,15 @@
   <button class="add" onclick="openAdd()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
   <button id="nav-dettes" onclick="go('dettes')"><svg viewBox="0 0 24 24"><path d="M3 7h18v12H3zM3 11h18"/></svg>Dettes</button>
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
+</div>
+
+<div class="fab-wrap"><button class="mic-fab" onclick="startVoice()" title="Dicter une dépense"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button></div>
+
+<div class="voice" id="voice">
+  <div class="vmic">🎤</div>
+  <div class="vtxt" id="vtxt">Je t'écoute…</div>
+  <div class="vhint">Dis par exemple :<br>« j'ai payé 4,50 pour un sandwich »</div>
+  <button class="vclose" onclick="stopVoice()">Annuler</button>
 </div>
 
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
@@ -524,6 +550,49 @@ function render(){
   $('stPts').textContent=pts;$('stStreak').textContent=S.game.streak;$('stLvl').textContent=lvl;
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
+}
+
+// ===== DICTÉE VOCALE =====
+let rec=null;
+function startVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){toast('🎤','La dictée n\'est pas dispo ici. Essaie sur Safari ou sur le site en ligne.');return}
+  rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=1;rec.continuous=false;
+  $('vtxt').textContent='Je t\'écoute…';$('voice').classList.add('on');
+  let finalText='';
+  rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;$('vtxt').textContent='« '+t+' »';if(e.results[e.results.length-1].isFinal)finalText=t};
+  rec.onerror=ev=>{$('voice').classList.remove('on');if(ev.error==='not-allowed'||ev.error==='service-not-allowed')toast('🎤','Autorise le micro pour dicter.');else toast('🎤','Je n\'ai pas bien entendu, réessaie.')};
+  rec.onend=()=>{$('voice').classList.remove('on');if(finalText)parseVoice(finalText)};
+  try{rec.start()}catch(e){$('voice').classList.remove('on')}
+}
+function stopVoice(){if(rec){rec.onresult=null;rec.onend=null;try{rec.stop()}catch(e){}}$('voice').classList.remove('on')}
+function parseVoice(txt){
+  const t=txt.toLowerCase().replace(/€/g,' euros ');
+  let amt=0,m;
+  if(m=t.match(/(\d+)\s*euros?\s*(\d{1,2})\b/))amt=+m[1]+(+m[2])/100;          // "4 euros 50"
+  else if(m=t.match(/(\d+)[.,](\d{1,2})\b/))amt=+(m[1]+'.'+m[2]);                // "4,50"
+  else if(m=t.match(/(\d+(?:[.,]\d+)?)/))amt=+m[1].replace(',','.');            // "4" / "12"
+  const map=[
+    ['resto',['sandwich','resto','restaurant','manger','déjeuner','dejeuner','dîner','diner','midi','café','cafe','bière','biere','pizza','kebab','burger','boire','coca','crêpe','crepe','boulangerie','croissant','snack','tacos','sushi']],
+    ['courses',['course','supermarché','supermarche','carrefour','monoprix','franprix','lidl','auchan','épicerie','epicerie','marché','marche']],
+    ['transport',['métro','metro','bus','uber','train','essence','taxi','vélib','velib','ticket','navigo','transport','péage','peage','parking']],
+    ['loisirs',['ciné','cine','cinéma','cinema','concert','sortie','bar','musée','musee','livre','jeu','spectacle','expo']],
+    ['sante',['médecin','medecin','pharmacie','docteur','dentiste','santé','sante','médicament','medicament']],
+    ['abo',['abonnement','netflix','spotify','forfait','abo']],
+    ['frais',['frais','banque','bnp','agios','commission','découvert','decouvert']],
+    ['loyer',['loyer','rent']]
+  ];
+  let cat='autre';for(const[c,kw]of map){if(kw.some(k=>t.includes(k))){cat=c;break}}
+  let note='';const pi=t.indexOf('pour ');if(pi>=0)note=txt.slice(pi+5).trim().replace(/^(un |une |le |la |des |de la |du |l')/i,'');
+  if(!note)note=catOf(cat).n;
+  note=note.charAt(0).toUpperCase()+note.slice(1);
+  openAddPrefill(amt,cat,note);
+  if(amt>0)toast('🎤',`Compris : ${eur2(amt)} € — ${note}. Vérifie et valide !`);
+  else toast('🎤','Je n\'ai pas saisi le montant, complète-le.');
+}
+function openAddPrefill(amt,cat,note){
+  openAdd();
+  setTimeout(()=>{addCat=cat;renderCats();if(amt>0)$('addAmt').value=amt;$('addNote').value=note||'';},80);
 }
 
 migrate();
