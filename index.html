@@ -267,6 +267,9 @@
 
     <div class="alert" id="proj"><div class="ic">📊</div><div><div class="t" id="projT">—</div><div class="d" id="projD">—</div></div></div>
 
+    <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
+    <div id="plannedList"></div>
+
     <div class="simu">
       <div class="h">💭 Avant d'acheter…</div>
       <div class="sub">Tu hésites ? Tape le montant, je te dis si tu peux.</div>
@@ -366,7 +369,7 @@ let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,tx:[],debts:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -377,6 +380,7 @@ function migrate(){
   if(!S.actions)S.actions=[];
   if(!S.life)S.life={streak:0,lastDay:null};
   if(!S.reward)S.reward={project:'',merite:0,threshold:100,unlocked:0};
+  if(!S.planned)S.planned=[];
 }
 
 const $=id=>document.getElementById(id);
@@ -542,6 +546,43 @@ function deleteDebt(){
   S.debts.splice(i,1);save();closeSheet();render();toast('🗑️','Dette supprimée.');
 }
 
+// ===== DÉPENSES PRÉVUES (prévisionnel) =====
+let editPlannedId=null;
+function openPlanned(){
+  editPlannedId=null;
+  $('sheetBody').innerHTML=`<h2>Dépense prévue</h2><div class="lead">Anticipe ce que tu sais devoir payer bientôt, pour un prévisionnel réaliste.</div>
+    <div class="field"><label>Quoi ?</label><input id="pLabel" type="text" placeholder="ex : Assurance, cadeau, resto prévu"></div>
+    <div class="field"><input id="pAmt" class="amt-in" type="number" inputmode="decimal" placeholder="0 €"></div>
+    <div class="field"><label>Quand ?</label><input id="pDate" type="date" value="${todayStr()}"></div>
+    <button class="btn btn-pri" onclick="savePlanned()">Ajouter au prévisionnel</button>`;
+  openSheet();setTimeout(()=>$('pLabel').focus(),350);
+}
+function savePlanned(){
+  const label=$('pLabel').value.trim(),amt=+$('pAmt').value,date=$('pDate').value||todayStr();
+  if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
+  S.planned.push({id:Date.now(),label:label||'Dépense prévue',amount:amt,date});
+  save();closeSheet();render();toast('📅','Ajoutée au prévisionnel.');
+}
+function openEditPlanned(id){
+  const p=S.planned.find(x=>x.id===id);if(!p)return;editPlannedId=id;
+  $('sheetBody').innerHTML=`<h2>Modifier la prévision</h2>
+    <div class="field"><label>Quoi ?</label><input id="pLabel" type="text" value="${(p.label||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><input id="pAmt" class="amt-in" type="number" value="${p.amount}"></div>
+    <div class="field"><label>Quand ?</label><input id="pDate" type="date" value="${p.date}"></div>
+    <button class="btn btn-pri" onclick="saveEditPlanned()" style="margin-bottom:10px">Enregistrer</button>
+    <button class="btn btn-red" onclick="deletePlanned()">🗑️ Supprimer</button>
+    <button class="btn btn-ghost" onclick="convertPlanned()" style="margin-top:10px">✓ C'est payé → noter la dépense</button>`;
+  openSheet();
+}
+function saveEditPlanned(){const p=S.planned.find(x=>x.id===editPlannedId);if(!p)return;const amt=+$('pAmt').value;if(!amt||amt<=0){toast('⚠️','Montant ?');return}p.label=$('pLabel').value.trim()||'Dépense prévue';p.amount=amt;p.date=$('pDate').value||p.date;save();closeSheet();render();toast('✏️','Prévision modifiée.')}
+function deletePlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;S.planned.splice(i,1);save();closeSheet();render();toast('🗑️','Prévision supprimée.')}
+function convertPlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;const p=S.planned[i];S.tx.unshift({id:Date.now(),date:todayStr(),type:'out',amount:p.amount,cat:'autre',note:p.label});S.solde-=p.amount;S.planned.splice(i,1);award(5);bumpStreak();save();closeSheet();render();toast('✅','Dépense notée et retirée du prévisionnel.')}
+function renderPlanned(){
+  const today=todayStr();
+  const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
+  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.55':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="m">${past?'à régulariser · ':''}${d}</div></div><div class="amt">${eur(p.amount)} €</div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+}
+
 // ===== GAMIFICATION =====
 function award(p){S.game.points+=p}
 function levelOf(p){return Math.floor(p/100)+1}
@@ -583,8 +624,21 @@ function claimReward(){if(S.reward.merite<S.reward.threshold)return;S.reward.mer
 
 // ===== PROJECTION =====
 function projection(){
+  const today=todayStr();
+  const upcoming=(S.planned||[]).filter(p=>p.date>=today);
+  const upTot=upcoming.reduce((a,p)=>a+p.amount,0);
+  const overdue=(S.planned||[]).filter(p=>p.date<today).reduce((a,p)=>a+p.amount,0);
+  // Si des dépenses sont prévues → projection basée dessus (plus utile)
+  if(upTot>0||overdue>0){
+    const soldeApres=S.solde-upTot-overdue;
+    if(soldeApres<0)return{cls:'bad',ic:'🔴',t:'Découvert en vue',d:`Tu as <b>${eur(upTot+overdue)} €</b> de dépenses prévues. Après elles, il te <b>manquera ${eur(Math.abs(soldeApres))} €</b>. Anticipe : rentre de l'argent, reporte, ou coupe une dépense.`};
+    const ratio=S.solde>0?soldeApres/S.solde:0;
+    if(soldeApres<150||ratio<0.2)return{cls:'warn',ic:'🟠',t:'Marge serrée',d:`Après tes <b>${eur(upTot+overdue)} €</b> prévus, il te restera <b>${eur(soldeApres)} €</b>. Reste prudent jusqu'à ta prochaine rentrée.`};
+    return{cls:'good',ic:'🟢',t:'Sous contrôle',d:`Même avec tes <b>${eur(upTot+overdue)} €</b> de dépenses prévues, il te restera <b>${eur(soldeApres)} €</b>. Beau pilotage 👌`};
+  }
+  // Sinon : projection mensuelle classique
   const net=S.revFixe-S.chargeFixe-S.budgetVar;
-  if(net>=0)return{cls:'good',ic:'🟢',t:'Tu tiens le cap',d:`À ce rythme, ton solde se maintient (+<b>${eur(net)} €</b>/mois estimé). Continue !`};
+  if(net>=0)return{cls:'good',ic:'🟢',t:'À l\'équilibre',d:`Sur le mois, ton budget tient (+<b>${eur(net)} €</b> estimé). Ajoute tes dépenses prévues pour affiner la prévision.`};
   const months=S.solde>0?S.solde/Math.abs(net):0,days=Math.max(0,Math.round(months*30));
   const date=new Date(Date.now()+days*864e5).toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
   let cls,ic,term;
@@ -696,7 +750,7 @@ function render(){
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 
-  renderCombats();renderReward();
+  renderCombats();renderReward();renderPlanned();
 }
 function renderCombats(){
   const card=$('combatCard');
