@@ -200,10 +200,12 @@
   .confetti{position:fixed;top:-10px;width:9px;height:14px;z-index:80;pointer-events:none;border-radius:2px}
 
   /* MIC FAB */
-  .fab-wrap{position:fixed;bottom:104px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;pointer-events:none;z-index:41;display:flex;justify-content:flex-end;padding:0 18px}
-  .mic-fab{pointer-events:auto;width:52px;height:52px;border-radius:50%;border:none;background:linear-gradient(135deg,var(--violet),var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 8px 24px -6px rgba(167,139,250,.6);transition:transform .15s}
-  .mic-fab:active{transform:scale(.92)}
-  .mic-fab svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .fab-wrap{position:fixed;bottom:104px;left:50%;transform:translateX(-50%);width:100%;max-width:480px;pointer-events:none;z-index:41;display:flex;justify-content:flex-end;gap:12px;padding:0 18px}
+  .mic-fab,.scan-fab{pointer-events:auto;width:52px;height:52px;border-radius:50%;border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+  .mic-fab{background:linear-gradient(135deg,var(--violet),var(--blue));box-shadow:0 8px 24px -6px rgba(167,139,250,.6)}
+  .scan-fab{background:linear-gradient(135deg,var(--blue),#3b6fc4);box-shadow:0 8px 24px -6px rgba(96,165,250,.6)}
+  .mic-fab:active,.scan-fab:active{transform:scale(.92)}
+  .mic-fab svg,.scan-fab svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
   /* VOICE OVERLAY */
   .voice{position:fixed;inset:0;z-index:75;background:rgba(10,12,18,.92);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;-webkit-user-select:none;user-select:none}
@@ -331,7 +333,11 @@
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
 </div>
 
-<div class="fab-wrap"><button class="mic-fab" id="micFab" title="Maintiens pour parler"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button></div>
+<div class="fab-wrap">
+  <button class="scan-fab" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button class="mic-fab" id="micFab" title="Maintiens pour parler"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button>
+</div>
+<input type="file" id="scanInput" accept="image/*" capture="environment" style="display:none" onchange="handleScan(this)">
 
 <div class="voice" id="voice">
   <div class="vmic"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></div>
@@ -828,6 +834,51 @@ function parseVoice(txt){
   else toast('🎤','Je n\'ai pas saisi le montant, complète-le.');
 }
 function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)$('addAmt').value=amt;$('addNote').value=note||'';},80)}
+
+// ===== SCAN DE TICKET (photo → Claude vision) =====
+function fileToResizedBase64(file,maxDim){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>{
+      const scale=Math.min(1,maxDim/Math.max(img.width,img.height));
+      const w=Math.round(img.width*scale),h=Math.round(img.height*scale);
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      resolve({data:c.toDataURL('image/jpeg',0.85).split(',')[1],mediaType:'image/jpeg'});
+    };
+    img.onerror=reject;img.src=URL.createObjectURL(file);
+  });
+}
+async function handleScan(input){
+  const file=input.files&&input.files[0];input.value='';
+  if(!file)return;
+  $('sheetBody').innerHTML=`<h2>📸 Analyse du ticket…</h2><div class="lead">Lecture des articles en cours, un instant.</div><div style="text-align:center;padding:34px;font-size:34px">⏳</div>`;openSheet();
+  try{
+    const {data,mediaType}=await fileToResizedBase64(file,1200);
+    const r=await fetch('/api/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({image:data,mediaType})});
+    const j=await r.json();
+    if(!r.ok){closeSheet();toast('📸',j.error||'Analyse impossible.');return}
+    openScanConfirm(j);
+  }catch(e){closeSheet();toast('📸','Erreur : '+(e.message||e))}
+}
+let scannedData=null;
+function openScanConfirm(j){
+  scannedData=j;const items=j.items||[];
+  const rows=items.map(it=>`<div class="tx"><div class="ic">🧾</div><div class="info"><div class="n">${it.label}</div><div class="m">${catOf(guessCat((it.label||'').toLowerCase())).n}</div></div><div class="amt">${eur2(it.price)} €</div></div>`).join('');
+  $('sheetBody').innerHTML=`<h2>🧾 Ticket analysé</h2><div class="lead">${j.merchant?j.merchant+' · ':''}${items.length} article(s) · total ${eur2(j.total||0)} €</div>${rows||'<div class="empty">Aucun article détecté. Réessaie avec une photo plus nette.</div>'}
+    ${items.length?`<button class="btn btn-pri" onclick="addScanned('detail')" style="margin:14px 0 10px">Ajouter le détail (${items.length} dépenses)</button>`:''}
+    <button class="btn btn-ghost" onclick="addScanned('total')">Ajouter juste le total (${eur2(j.total||0)} €)</button>`;
+  openSheet();
+}
+function addScanned(mode){
+  if(!scannedData)return;const date=todayStr();
+  if(mode==='detail'){
+    const base=Date.now();(scannedData.items||[]).forEach((it,i)=>{S.tx.unshift({id:base+i,date,type:'out',amount:it.price,cat:guessCat((it.label||'').toLowerCase()),note:it.label});S.solde-=it.price});award(8);
+  }else{
+    const t=scannedData.total||0;S.tx.unshift({id:Date.now(),date,type:'out',amount:t,cat:'courses',note:scannedData.merchant||'Ticket'});S.solde-=t;award(5);
+  }
+  bumpStreak();save();closeSheet();render();toast('🧾','Dépenses du ticket ajoutées !');
+}
 
 // talkie : maintiens pour parler, relâche pour valider
 const mf=$('micFab');
