@@ -188,9 +188,10 @@
   .mic-fab svg{width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 
   /* VOICE OVERLAY */
-  .voice{position:fixed;inset:0;z-index:75;background:rgba(10,12,18,.92);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center}
+  .voice{position:fixed;inset:0;z-index:75;background:rgba(10,12,18,.92);backdrop-filter:blur(8px);display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px;text-align:center;-webkit-user-select:none;user-select:none}
   .voice.on{display:flex}
-  .vmic{width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-size:46px;margin-bottom:26px;position:relative}
+  .vmic{width:110px;height:110px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;margin-bottom:26px;position:relative;pointer-events:none}
+  .vmic svg{pointer-events:none}
   .vmic::before,.vmic::after{content:'';position:absolute;inset:0;border-radius:50%;border:2px solid var(--violet);animation:ripple 1.8s ease-out infinite}
   .vmic::after{animation-delay:.9s}
   @keyframes ripple{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.8);opacity:0}}
@@ -291,7 +292,8 @@
     <div class="badges" id="badgeGrid"></div>
     <div class="sec-t">Réglages</div>
     <button class="btn btn-ghost" onclick="openSettings()" style="margin-bottom:10px">⚙️ Modifier mes montants fixes</button>
-    <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Exporter mes données</button>
+    <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
+    <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Sauvegarde complète (JSON)</button>
     <button class="btn btn-red" onclick="resetAll()">🗑️ Tout réinitialiser</button>
     <div class="hint" style="text-align:center;margin-top:16px">Tes données restent privées, uniquement sur cet appareil.</div>
   </div>
@@ -305,13 +307,12 @@
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
 </div>
 
-<div class="fab-wrap"><button class="mic-fab" onclick="startVoice()" title="Dicter une dépense"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button></div>
+<div class="fab-wrap"><button class="mic-fab" id="micFab" title="Maintiens pour parler"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button></div>
 
 <div class="voice" id="voice">
-  <div class="vmic">🎤</div>
-  <div class="vtxt" id="vtxt">Je t'écoute…</div>
-  <div class="vhint">Dis par exemple :<br>« j'ai payé 4,50 pour un sandwich »</div>
-  <button class="vclose" onclick="stopVoice()">Annuler</button>
+  <div class="vmic"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></div>
+  <div class="vtxt" id="vtxt">Parle…</div>
+  <div class="vhint">Garde le doigt appuyé et parle.<br>Relâche pour valider.<br><br>Ex : « 4,50 pour un sandwich » ou « pain au choco à 1,40 au lieu d'un éclair à 2,70 »</div>
 </div>
 
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
@@ -495,6 +496,18 @@ function openSettings(){
 }
 function saveSettings(){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);save();closeSheet();render();toast('⚙️','Montants mis à jour.')}
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tresor-sauvegarde.json';a.click();toast('💾','Sauvegarde téléchargée.')}
+function exportCSV(){
+  if(!S.tx.length){toast('📊','Aucun mouvement à exporter.');return}
+  const esc=v=>'"'+String(v).replace(/"/g,'""')+'"';
+  const rows=[['Date','Type','Catégorie','Montant (€)','Note']];
+  S.tx.slice().sort((a,b)=>a.date<b.date?1:-1).forEach(t=>{
+    rows.push([t.date,t.type==='out'?'Dépense':'Revenu',t.type==='out'?catOf(t.cat).n:'Revenu',(t.type==='out'?'-':'+')+t.amount,t.note||'']);
+  });
+  const csv='﻿'+rows.map(r=>r.map(esc).join(';')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tresor-comptes.csv';a.click();
+  toast('📊','Tableur exporté ! Ouvre-le dans Excel ou Numbers.');
+}
 function resetAll(){if(confirm('Tout effacer et recommencer ? Définitif.')){localStorage.removeItem(KEY);location.reload()}}
 
 // ===== NAV / SHEET / TOAST =====
@@ -552,37 +565,61 @@ function render(){
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 }
 
-// ===== DICTÉE VOCALE =====
-let rec=null;
-function startVoice(){
+// ===== DICTÉE VOCALE (talkie : maintiens pour parler) =====
+let rec=null,recLatest='',recHolding=false;
+function holdStart(e){
+  if(e)e.preventDefault();
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){toast('🎤','La dictée n\'est pas dispo ici. Essaie sur Safari ou sur le site en ligne.');return}
-  rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=1;rec.continuous=false;
-  $('vtxt').textContent='Je t\'écoute…';$('voice').classList.add('on');
-  let finalText='';
-  rec.onresult=e=>{let t='';for(const r of e.results)t+=r[0].transcript;$('vtxt').textContent='« '+t+' »';if(e.results[e.results.length-1].isFinal)finalText=t};
-  rec.onerror=ev=>{$('voice').classList.remove('on');if(ev.error==='not-allowed'||ev.error==='service-not-allowed')toast('🎤','Autorise le micro pour dicter.');else toast('🎤','Je n\'ai pas bien entendu, réessaie.')};
-  rec.onend=()=>{$('voice').classList.remove('on');if(finalText)parseVoice(finalText)};
-  try{rec.start()}catch(e){$('voice').classList.remove('on')}
+  if(!SR){toast('🎤','La dictée n\'est pas dispo ici. Ouvre l\'app dans Brave ou Safari, en ligne (https).');return}
+  recLatest='';recHolding=true;
+  rec=new SR();rec.lang='fr-FR';rec.interimResults=true;rec.maxAlternatives=3;rec.continuous=true;
+  $('vtxt').textContent='Parle…';$('voice').classList.add('on');
+  rec.onresult=ev=>{let t='';for(const r of ev.results)t+=r[0].transcript;recLatest=t;$('vtxt').textContent='« '+t+' »'};
+  rec.onerror=ev=>{recHolding=false;$('voice').classList.remove('on');if(ev.error==='not-allowed'||ev.error==='service-not-allowed')toast('🎤','Autorise le micro dans les réglages.');else if(ev.error==='network')toast('🎤','Brave bloque parfois le moteur. Essaie Safari, ou tape à la main.');};
+  rec.onend=()=>{$('voice').classList.remove('on');if(recLatest.trim())parseVoice(recLatest)};
+  try{rec.start()}catch(e){recHolding=false;$('voice').classList.remove('on')}
 }
-function stopVoice(){if(rec){rec.onresult=null;rec.onend=null;try{rec.stop()}catch(e){}}$('voice').classList.remove('on')}
+function holdEnd(e){if(e)e.preventDefault();if(!recHolding)return;recHolding=false;if(rec){try{rec.stop()}catch(e){}}}
+
+const CATMAP=[
+  ['resto',['sandwich','resto','restaurant','manger','déjeuner','dejeuner','dîner','diner','midi','café','cafe','bière','biere','pizza','kebab','burger','boire','coca','crêpe','crepe','boulangerie','croissant','pain au choc','pain au chocolat','éclair','eclair','snack','tacos','sushi','gâteau','gateau','viennoiserie']],
+  ['courses',['course','supermarché','supermarche','carrefour','monoprix','franprix','lidl','auchan','épicerie','epicerie','marché','marche']],
+  ['transport',['métro','metro','bus','uber','train','essence','taxi','vélib','velib','ticket','navigo','transport','péage','peage','parking']],
+  ['loisirs',['ciné','cine','cinéma','cinema','concert','sortie','bar','musée','musee','livre','jeu','spectacle','expo']],
+  ['sante',['médecin','medecin','pharmacie','docteur','dentiste','santé','sante','médicament','medicament']],
+  ['abo',['abonnement','netflix','spotify','forfait','abo']],
+  ['frais',['frais','banque','bnp','agios','commission','découvert','decouvert']],
+  ['loyer',['loyer','rent']]
+];
+function guessCat(t){for(const[c,kw]of CATMAP){if(kw.some(k=>t.includes(k)))return c}return 'autre'}
+function allAmounts(t){
+  const out=[];const re=/(\d+)\s*euros?\s*(\d{1,2})\b|(\d+)[.,](\d{1,2})\b|(\d+(?:[.,]\d+)?)/g;let m;
+  while(m=re.exec(t)){
+    if(m[1]!==undefined)out.push(+m[1]+(+m[2])/100);
+    else if(m[3]!==undefined)out.push(+(m[3]+'.'+m[4]));
+    else if(m[5]!==undefined)out.push(+m[5].replace(',','.'));
+  }
+  return out;
+}
 function parseVoice(txt){
   const t=txt.toLowerCase().replace(/€/g,' euros ');
-  let amt=0,m;
-  if(m=t.match(/(\d+)\s*euros?\s*(\d{1,2})\b/))amt=+m[1]+(+m[2])/100;          // "4 euros 50"
-  else if(m=t.match(/(\d+)[.,](\d{1,2})\b/))amt=+(m[1]+'.'+m[2]);                // "4,50"
-  else if(m=t.match(/(\d+(?:[.,]\d+)?)/))amt=+m[1].replace(',','.');            // "4" / "12"
-  const map=[
-    ['resto',['sandwich','resto','restaurant','manger','déjeuner','dejeuner','dîner','diner','midi','café','cafe','bière','biere','pizza','kebab','burger','boire','coca','crêpe','crepe','boulangerie','croissant','snack','tacos','sushi']],
-    ['courses',['course','supermarché','supermarche','carrefour','monoprix','franprix','lidl','auchan','épicerie','epicerie','marché','marche']],
-    ['transport',['métro','metro','bus','uber','train','essence','taxi','vélib','velib','ticket','navigo','transport','péage','peage','parking']],
-    ['loisirs',['ciné','cine','cinéma','cinema','concert','sortie','bar','musée','musee','livre','jeu','spectacle','expo']],
-    ['sante',['médecin','medecin','pharmacie','docteur','dentiste','santé','sante','médicament','medicament']],
-    ['abo',['abonnement','netflix','spotify','forfait','abo']],
-    ['frais',['frais','banque','bnp','agios','commission','découvert','decouvert']],
-    ['loyer',['loyer','rent']]
-  ];
-  let cat='autre';for(const[c,kw]of map){if(kw.some(k=>t.includes(k))){cat=c;break}}
+  const cat=guessCat(t);
+  const compare=/(au lieu|plutôt qu|plutot qu|à la place|a la place|au lieu d)/.test(t);
+  const amounts=allAmounts(t);
+  // Mode "rat" : j'ai pris X au lieu de Y → économie = différence
+  if(compare && amounts.length>=2){
+    const paye=amounts[0], evite=amounts[1];
+    const eco=Math.abs(evite-paye);
+    if(eco>0){
+      S.tirelire+=eco;award(Math.max(3,Math.round(eco)));bumpStreak();
+      if(!hasBadge('resist'))giveBadge('resist');save();render();
+      toast('🐀',`Malin ! +${eur2(eco)} € économisés dans la tirelire.`);
+      if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1500);
+      return;
+    }
+  }
+  // Mode dépense classique
+  const amt=amounts[0]||0;
   let note='';const pi=t.indexOf('pour ');if(pi>=0)note=txt.slice(pi+5).trim().replace(/^(un |une |le |la |des |de la |du |l')/i,'');
   if(!note)note=catOf(cat).n;
   note=note.charAt(0).toUpperCase()+note.slice(1);
@@ -590,10 +627,15 @@ function parseVoice(txt){
   if(amt>0)toast('🎤',`Compris : ${eur2(amt)} € — ${note}. Vérifie et valide !`);
   else toast('🎤','Je n\'ai pas saisi le montant, complète-le.');
 }
-function openAddPrefill(amt,cat,note){
-  openAdd();
-  setTimeout(()=>{addCat=cat;renderCats();if(amt>0)$('addAmt').value=amt;$('addNote').value=note||'';},80);
-}
+function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)$('addAmt').value=amt;$('addNote').value=note||'';},80)}
+
+// talkie : maintiens pour parler, relâche pour valider
+const mf=$('micFab');
+mf.addEventListener('pointerdown',holdStart);
+mf.addEventListener('pointerup',holdEnd);
+mf.addEventListener('pointerleave',holdEnd);
+mf.addEventListener('pointercancel',holdEnd);
+mf.addEventListener('contextmenu',e=>e.preventDefault());
 
 migrate();
 if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render()}
