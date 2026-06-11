@@ -24,19 +24,41 @@ L'esprit du projet : un **ange gardien financier** qui aide à prévoir, rester 
 - [ ] **Onglet « Dépenses probables »** (saisie manuelle d'abord)
 - [ ] Remplacer le message « tu tiens le cap » par quelque chose d'utile
 
-## 🟠 Phase 2 — Mode & engagement (sans serveur)
-- [ ] **Mode Chaos** (ambiance sous-marin / mission survie) : déclenché en déficit
-  - Couleurs d'alerte sous-marin
-  - Chaque dépense **non essentielle** (hors transport / loyer / santé) fait **perdre des points**
-  - On s'en sort en travaillant ses actions de vie valorisées
-  - Suivi type Duolingo (streaks)
+## 🟢 Phase 1bis — Corrections & clarté (en cours, sans serveur)
+- [ ] **Tirelire éditable** : historique des « j'ai résisté » / économies, cliquable, modifiable/supprimable
+- [ ] **Cliquer sur un poste de dépense** (Analyse) → voir la liste des dépenses de ce poste (UX friendly)
+- [x] **Micro « au lieu de »** : « pâtes à 2€ au lieu des raviolis à 4€ » → économie comptée, PAS la dépense (pas de doublon)
+- [ ] Renommer onglet **Dettes → Silos** (projets où l'on déverse nos efforts)
+- [ ] **Combats du JOUR → du MOIS** (les vrais combats sont long terme) + carte plus compacte
+- [ ] **Roulette au « Marquer fait »** : choisir heures + satisfaction de soi → points variables
+- [ ] **Streaks valorisés** dans les points
+- [ ] **Page d'accueil moins fouillie** : hiérarchie plus claire, combats compactés
+
+## 🟠 Phase 2 — Modes & jeu de points repensé (sans serveur)
+- [ ] **Deux modes distincts** (code couleur du rose au jaune) :
+  - **Mode Précarité** et **Mode Chaos** (déficit / survie)
+  - Ambiance sous-marin / mission, alerte visuelle
+- [ ] **Jeu de points repensé** :
+  - En phase critique : les points servent à **racheter des dépenses inutiles**
+  - Quand les finances le permettent : les points (streaks, bonnes pratiques) débloquent des **achats futiles récompenses**
+  - Visuel d'une **dépense gelée** (plus comptée comme futile) — difficile à geler : régularité OU épargne dans les silos
+  - **Dépenses futiles** (quand pauvre) : voyage loisir, verre, cigarettes, ciné, resto
+- [ ] Dépense non essentielle (hors transport/loyer/santé) = **perte de points** en mode critique
+- [ ] Suivi type Duolingo (streaks)
+
+## 🟣 Phase 2bis — Fiabilité capture (sans serveur)
+- [ ] **File d'attente offline** pour le micro ET la photo : l'info captée est mise en queue (protégée même sans réseau)
+- [ ] L'IA bosse **en fond** → notification cloche quand le ticket est prêt
 
 ## 🔴 Phase 3 — Cluster « backend » (serveur requis)
 Ces fonctions vont ensemble car elles demandent la même brique (compte + serveur).
 - [ ] **Compte utilisateur** + personnalisation + synchro multi-appareils (Supabase)
 - [ ] **Connexion agenda par API** (Google Agenda…) → l'app sait ce qui arrive et estime les dépenses à venir
   - Prérequis : mieux libeller ses activités d'agenda
-  - Alimente l'onglet « Dépenses probables » automatiquement
+  - **L'agenda n'apparaît PAS** (pas de recréer Google Agenda)
+  - À chaque actualisation de l'app : scan de l'agenda → **notification cloche** « veux-tu estimer le coût de tes engagements à venir ? »
+  - Interface façon **Tinder** (swipe) + **roulette d'estimation de prix** (comme EasyPark)
+  - Les événements estimés alimentent les **dépenses probables**
 - [ ] **IA ange gardien** : planifie/prévoit les dépenses, te dit avec réalisme à quel point tu déranges tes finances, te rappelle les enjeux
 - [ ] **Moteur audio cloud** (Whisper / Deepgram) : fiable sur les chiffres (Apple confond)
 - [ ] **Recommandations de stratégies par IA** (version « règles » possible avant)

@@ -64,14 +64,14 @@
   .pour-btn:disabled{opacity:.4;cursor:not-allowed}
 
   /* COMBATS + RÉCOMPENSE */
-  .lifecard{margin-top:14px;background:linear-gradient(160deg,#16221c,#141b18);border:1px solid rgba(52,211,153,.22);border-radius:18px;padding:18px 20px}
+  .lifecard{margin-top:14px;background:linear-gradient(160deg,#16221c,#141b18);border:1px solid rgba(52,211,153,.22);border-radius:18px;padding:15px 18px}
   .rewardcard{margin-top:14px;background:linear-gradient(160deg,#221d14,#1b1812);border:1px solid rgba(255,203,107,.25);border-radius:18px;padding:18px 20px}
   .cardh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
   .cardh .ct{font-size:15px;font-weight:600}
   .cardh .cstreak{font-size:13px;color:var(--amber);font-weight:600}
-  .combat-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
-  .combat-row .cl{font-size:15px}
-  .cdo{background:var(--green-d);color:var(--green);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+  .combat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+  .combat-row .cl{font-size:14px}
+  .cdo{background:var(--green-d);color:var(--green);border:1px solid rgba(52,211,153,.3);border-radius:9px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
   .cdo.done{background:transparent;color:var(--muted);border-color:var(--line);cursor:default}
   .lnk-edit{background:none;border:none;color:var(--muted);font-size:12px;margin-top:10px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline;padding:0}
   .rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
@@ -252,8 +252,8 @@
 
     <!-- TIRELIRE -->
     <div class="piggy">
-      <div class="ph">
-        <div class="t">🐷 Ma tirelire</div>
+      <div class="ph" onclick="openPiggyHistory()" style="cursor:pointer">
+        <div class="t">🐷 Ma tirelire <span style="color:var(--muted);font-size:13px;font-weight:400">· voir ›</span></div>
         <div class="amt num" id="piggyAmt">0 €</div>
       </div>
       <div class="palbar"><i id="palFill" style="width:0"></i></div>
@@ -329,7 +329,7 @@
   <button class="on" id="nav-accueil" onclick="go('accueil')"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Accueil</button>
   <button id="nav-analyse" onclick="go('analyse')"><svg viewBox="0 0 24 24"><path d="M5 21V9M12 21V4M19 21v-7"/></svg>Analyse</button>
   <button class="add" onclick="openAdd()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button id="nav-dettes" onclick="go('dettes')"><svg viewBox="0 0 24 24"><path d="M3 7h18v12H3zM3 11h18"/></svg>Dettes</button>
+  <button id="nav-dettes" onclick="go('dettes')"><svg viewBox="0 0 24 24"><path d="M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>Silos</button>
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
 </div>
 
@@ -375,7 +375,7 @@ let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -387,6 +387,7 @@ function migrate(){
   if(!S.life)S.life={streak:0,lastDay:null};
   if(!S.reward)S.reward={project:'',merite:0,threshold:100,unlocked:0};
   if(!S.planned)S.planned=[];
+  if(!S.piggyLog)S.piggyLog=[];
 }
 
 const $=id=>document.getElementById(id);
@@ -444,7 +445,8 @@ function openResist(){
 }
 function saveResist(){
   const amt=+$('rAmt').value;if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
-  S.tirelire+=amt;award(Math.max(3,Math.round(amt)));meriteAdd(Math.max(2,Math.round(amt/2)));bumpStreak();
+  S.tirelire+=amt;S.piggyLog.unshift({id:Date.now(),date:todayStr(),amount:amt,note:$('rNote').value.trim(),type:'resist'});
+  award(Math.max(3,Math.round(amt)));meriteAdd(Math.max(2,Math.round(amt/2)));bumpStreak();
   if(!hasBadge('resist'))giveBadge('resist');save();closeSheet();render();
   toast('🐷',`+${eur2(amt)} € dans la tirelire ! Beau réflexe.`);
   if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1400);
@@ -583,6 +585,42 @@ function openEditPlanned(id){
 function saveEditPlanned(){const p=S.planned.find(x=>x.id===editPlannedId);if(!p)return;const amt=+$('pAmt').value;if(!amt||amt<=0){toast('⚠️','Montant ?');return}p.label=$('pLabel').value.trim()||'Dépense prévue';p.amount=amt;p.date=$('pDate').value||p.date;save();closeSheet();render();toast('✏️','Prévision modifiée.')}
 function deletePlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;S.planned.splice(i,1);save();closeSheet();render();toast('🗑️','Prévision supprimée.')}
 function convertPlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;const p=S.planned[i];S.tx.unshift({id:Date.now(),date:todayStr(),type:'out',amount:p.amount,cat:'autre',note:p.label});S.solde-=p.amount;S.planned.splice(i,1);award(5);bumpStreak();save();closeSheet();render();toast('✅','Dépense notée et retirée du prévisionnel.')}
+function openCatDetail(cid){
+  const c=catOf(cid),m=monthOf(todayStr());
+  const list=S.tx.filter(t=>t.type==='out'&&t.cat===cid&&monthOf(t.date)===m).sort((a,b)=>a.date<b.date?1:-1);
+  const tot=list.reduce((s,t)=>s+t.amount,0);
+  const rows=list.map(t=>{const d=new Date(t.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="closeSheet();setTimeout(()=>openEditTx(${t.id}),330)"><div class="ic">${c.e}</div><div class="info"><div class="n">${t.note||c.n}</div><div class="m">${d}</div></div><div class="amt">–${eur(t.amount)} €</div></div>`}).join('');
+  $('sheetBody').innerHTML=`<h2>${c.e} ${c.n}</h2><div class="lead">${list.length} dépense(s) ce mois · total <b>${eur(tot)} €</b></div>${rows||'<div class="empty">Aucune dépense dans ce poste.</div>'}<div class="hint" style="text-align:center;margin-top:10px">Touche une ligne pour la modifier.</div>`;
+  openSheet();
+}
+// ===== TIRELIRE : historique éditable =====
+let editPiggyId=null;
+function openPiggyHistory(){
+  const log=S.piggyLog||[];
+  const rows=log.map(e=>{const d=new Date(e.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});const ic=e.type==='compare'?'🐀':'💪';return `<div class="tx" onclick="openEditPiggy(${e.id})"><div class="ic">${ic}</div><div class="info"><div class="n">${e.note||(e.type==='compare'?'Économie maligne':'Résistance')}</div><div class="m">${d}</div></div><div class="amt in">+${eur2(e.amount)} €</div></div>`}).join('');
+  $('sheetBody').innerHTML=`<h2>🐷 Ma tirelire</h2><div class="lead">Solde : <b style="color:var(--violet)">${eur2(S.tirelire)} €</b> · tout ce que tu as mis de côté :</div>${rows||'<div class="empty">Rien encore. Résiste à un achat pour commencer !</div>'}${log.length?'<div class="hint" style="text-align:center;margin-top:10px">Touche une entrée pour la modifier ou la retirer.</div>':''}`;
+  openSheet();
+}
+function openEditPiggy(id){
+  const e=(S.piggyLog||[]).find(x=>x.id===id);if(!e)return;editPiggyId=id;
+  $('sheetBody').innerHTML=`<h2>Modifier l'entrée</h2><div class="lead">Ajuste si tu t'es trompé.</div>
+    <div class="field"><label>Montant économisé (€)</label><input id="epAmt" class="amt-in" type="number" value="${e.amount}"></div>
+    <div class="field"><label>Note</label><input id="epNote" type="text" value="${(e.note||'').replace(/"/g,'&quot;')}"></div>
+    <button class="btn btn-pri" onclick="saveEditPiggy()" style="margin-bottom:10px">Enregistrer</button>
+    <button class="btn btn-red" onclick="deletePiggy()">🗑️ Retirer de la tirelire</button>`;
+  openSheet();
+}
+function saveEditPiggy(){
+  const e=(S.piggyLog||[]).find(x=>x.id===editPiggyId);if(!e)return;
+  const newAmt=+$('epAmt').value;if(isNaN(newAmt)||newAmt<0){toast('⚠️','Montant ?');return}
+  S.tirelire=Math.max(0,S.tirelire+(newAmt-e.amount));e.amount=newAmt;e.note=$('epNote').value.trim();
+  save();render();openPiggyHistory();toast('✏️','Entrée modifiée.');
+}
+function deletePiggy(){
+  const i=(S.piggyLog||[]).findIndex(x=>x.id===editPiggyId);if(i<0)return;
+  S.tirelire=Math.max(0,S.tirelire-S.piggyLog[i].amount);S.piggyLog.splice(i,1);
+  save();render();openPiggyHistory();toast('🗑️','Entrée retirée.');
+}
 function renderPlanned(){
   const today=todayStr();
   const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
@@ -742,7 +780,7 @@ function render(){
   const byCat={};S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
   const entries=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   const maxRef=S.budgetVar>0?S.budgetVar:(entries[0]?entries[0][1]:1);
-  $('siloRow').innerHTML=entries.length?entries.map(([cid,val])=>{const c=catOf(cid);const h=Math.min(100,val/maxRef*100);const cls=h>90?'r':h>65?'a':h>35?'':'g';return `<div class="silo"><div class="tube"><div class="e">${c.e}</div><div class="fill ${cls}" style="height:${Math.max(6,h)}%"></div></div><div class="amt">${eur(val)} €</div><div class="n">${c.n}</div></div>`}).join(''):'<div class="empty" style="flex:1">Aucune dépense ce mois.<br>Tes silos sont vides 🫙</div>';
+  $('siloRow').innerHTML=entries.length?entries.map(([cid,val])=>{const c=catOf(cid);const h=Math.min(100,val/maxRef*100);const cls=h>90?'r':h>65?'a':h>35?'':'g';return `<div class="silo" onclick="openCatDetail('${cid}')" style="cursor:pointer"><div class="tube"><div class="e">${c.e}</div><div class="fill ${cls}" style="height:${Math.max(6,h)}%"></div></div><div class="amt">${eur(val)} €</div><div class="n">${c.n}</div></div>`}).join(''):'<div class="empty" style="flex:1">Aucune dépense ce mois.<br>Tes silos sont vides 🫙</div>';
 
   // dettes
   const active=S.debts.filter(d=>d.paid<d.total);
@@ -762,7 +800,7 @@ function renderCombats(){
   const card=$('combatCard');
   if(!S.combats.length){card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats</div></div><div class="hint" style="margin-bottom:12px">Choisis 1 ou 2 domaines (musique, sport, lecture, étude…) pour gagner des points en bossant sur toi.</div><button class="btn btn-ghost" onclick="openCombats()">Choisir mes combats</button>`;return}
   const rows=S.combats.map(id=>{const c=COMBATS.find(x=>x.id===id)||{e:'✨',n:id};const done=actionDoneToday(id);return `<div class="combat-row"><div class="cl">${c.e} ${c.n}</div><button class="cdo ${done?'done':''}" onclick="logAction('${id}')">${done?'✓ Fait':'Marquer fait'}</button></div>`}).join('');
-  card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats du jour</div><div class="cstreak">🔥 ${S.life.streak} j</div></div>${rows}<button class="lnk-edit" onclick="openCombats()">Modifier mes combats</button>`;
+  card.innerHTML=`<div class="cardh"><div class="ct">🎯 Combats du mois</div><div class="cstreak">🔥 ${S.life.streak} j</div></div>${rows}<button class="lnk-edit" onclick="openCombats()">Modifier mes combats</button>`;
 }
 function renderReward(){
   const card=$('rewardCard');
@@ -817,7 +855,8 @@ function parseVoice(txt){
     const paye=amounts[0], evite=amounts[1];
     const eco=Math.abs(evite-paye);
     if(eco>0){
-      S.tirelire+=eco;award(Math.max(3,Math.round(eco)));meriteAdd(Math.max(2,Math.round(eco/2)));bumpStreak();
+      S.tirelire+=eco;S.piggyLog.unshift({id:Date.now(),date:todayStr(),amount:eco,note:txt.trim().slice(0,60),type:'compare'});
+      award(Math.max(3,Math.round(eco)));meriteAdd(Math.max(2,Math.round(eco/2)));bumpStreak();
       if(!hasBadge('resist'))giveBadge('resist');save();render();
       toast('🐀',`Malin ! +${eur2(eco)} € économisés dans la tirelire.`);
       if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1500);
