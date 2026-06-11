@@ -80,6 +80,12 @@
   .merite-bar{height:12px;border-radius:50px;background:rgba(255,255,255,.07);overflow:hidden;margin:12px 0 8px}
   .merite-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--amber));border-radius:50px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
   .claim-btn{background:linear-gradient(180deg,#ffd784,var(--gold));color:#2a1c00;width:100%;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px}
+  .faces{display:flex;gap:8px}
+  .face{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 0;font-size:24px;cursor:pointer;transition:transform .15s,border-color .2s,background .2s}
+  .face.on{border-color:var(--violet);background:var(--card-2);transform:scale(1.08)}
+  .pts-preview{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:36px;font-weight:600;color:var(--green);margin:4px 0 16px}
+  .pts-preview small{font-size:16px;color:var(--muted);font-weight:500}
+  input[type=range]{accent-color:var(--green);height:26px}
 
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
   .alert.good{background:var(--green-d);border-color:rgba(52,211,153,.3)}
@@ -647,11 +653,35 @@ function toggleCombat(id){const i=combatSel.indexOf(id);if(i>=0)combatSel.splice
 function saveCombats(){S.combats=combatSel;save();closeSheet();render();toast('🎯','Combats choisis ! Au boulot 💪')}
 function actionDoneToday(id){const t=todayStr();return S.actions.some(a=>a.date===t&&a.combat===id)}
 function bumpLifeStreak(){const t=todayStr(),last=S.life.lastDay;if(last===t)return;const y=new Date(Date.now()-864e5).toISOString().slice(0,10);S.life.streak=(last===y)?S.life.streak+1:1;S.life.lastDay=t}
+let combatPick={id:null,hours:1,satis:3};
 function logAction(id){
   if(actionDoneToday(id)){toast('✅','Déjà fait aujourd\'hui !');return}
-  S.actions.push({date:todayStr(),combat:id});award(10);meriteAdd(10);bumpLifeStreak();
-  if(!hasBadge('combat'))giveBadge('combat');save();render();
-  const c=COMBATS.find(x=>x.id===id)||{n:id};toast('🎯',`${c.n} : fait ! +10 pts de mérite 💪`);
+  combatPick={id,hours:1,satis:3};renderCombatDone();openSheet();
+}
+function fmtH(h){return h<1?Math.round(h*60)+' min':((h%1?h.toFixed(2).replace(/0$/,'').replace('.',','):h)+' h')}
+function combatPoints(){const hp=Math.round(combatPick.hours*8);const sp=combatPick.satis*4;const sb=Math.min(S.life.streak,10);return hp+sp+sb}
+function renderPtsLive(){const e=$('ptsLive');if(e)e.textContent=combatPoints();const l=$('hrLbl');if(l)l.textContent=fmtH(combatPick.hours)}
+function renderCombatDone(){
+  const c=COMBATS.find(x=>x.id===combatPick.id)||{e:'✨',n:''};
+  const faces=['😐','🙂','😀','😍','🤩'];
+  $('sheetBody').innerHTML=`
+    <h2>${c.e} ${c.n} — fait !</h2>
+    <div class="lead">Note ta session : tu gagnes des points à ta juste mesure.</div>
+    <div class="field"><label>Temps passé : <b id="hrLbl">${fmtH(combatPick.hours)}</b></label>
+      <input id="hrRange" type="range" min="0.25" max="5" step="0.25" value="${combatPick.hours}" oninput="combatPick.hours=+this.value;renderPtsLive()"></div>
+    <div class="field"><label>Satisfaction de toi</label>
+      <div class="faces">${faces.map((f,i)=>`<button type="button" class="face ${combatPick.satis===i+1?'on':''}" onclick="combatPick.satis=${i+1};renderCombatDone()">${f}</button>`).join('')}</div></div>
+    <div class="pts-preview">+<span id="ptsLive">${combatPoints()}</span> <small>pts</small></div>
+    <div class="hint" style="text-align:center;margin-bottom:14px">🔥 Bonus de série : +${Math.min(S.life.streak,10)} pts</div>
+    <button class="btn btn-pri" onclick="confirmCombat()">Valider ma session</button>`;
+}
+function confirmCombat(){
+  const id=combatPick.id;if(!id||actionDoneToday(id)){closeSheet();return}
+  const pts=combatPoints();
+  S.actions.push({date:todayStr(),combat:id,hours:combatPick.hours,satis:combatPick.satis,pts});
+  award(pts);meriteAdd(Math.round(pts/2));bumpLifeStreak();
+  if(!hasBadge('combat'))giveBadge('combat');save();closeSheet();render();
+  const c=COMBATS.find(x=>x.id===id)||{n:id};toast('🎯',`${c.n} : +${pts} pts ! Continue 💪`);
 }
 
 // ===== RÉCOMPENSE =====
