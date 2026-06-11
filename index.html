@@ -72,7 +72,7 @@
   .combat-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
   .combat-row .cl{font-size:14px}
   .cdo{background:var(--green-d);color:var(--green);border:1px solid rgba(52,211,153,.3);border-radius:9px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
-  .cdo.done{background:transparent;color:var(--muted);border-color:var(--line);cursor:default}
+  .cdo.done{background:transparent;color:var(--muted);border-color:var(--line);cursor:pointer}
   .lnk-edit{background:none;border:none;color:var(--muted);font-size:12px;margin-top:10px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline;padding:0}
   .rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
   .rh .rp{font-weight:600;font-size:15px}
@@ -683,6 +683,19 @@ function confirmCombat(){
   if(!hasBadge('combat'))giveBadge('combat');save();closeSheet();render();
   const c=COMBATS.find(x=>x.id===id)||{n:id};toast('🎯',`${c.n} : +${pts} pts ! Continue 💪`);
 }
+function undoAction(id){
+  const t=todayStr();const idx=S.actions.findIndex(a=>a.date===t&&a.combat===id);if(idx<0)return;
+  const a=S.actions[idx];const pts=a.pts||10;
+  S.game.points=Math.max(0,S.game.points-pts);
+  if(S.reward)S.reward.merite=Math.max(0,S.reward.merite-Math.round(pts/2));
+  S.actions.splice(idx,1);
+  if(!S.actions.some(x=>x.date===t)){
+    S.life.streak=Math.max(0,S.life.streak-1);
+    const past=S.actions.map(x=>x.date).filter(d=>d<t).sort();
+    S.life.lastDay=past.length?past[past.length-1]:null;
+  }
+  save();render();toast('↩️',`Combat défait. −${pts} pts.`);
+}
 
 // ===== RÉCOMPENSE =====
 function meriteAdd(n){if(!S.reward)return;S.reward.merite+=n}
@@ -829,7 +842,7 @@ function render(){
 function renderCombats(){
   const card=$('combatCard');
   if(!S.combats.length){card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats</div></div><div class="hint" style="margin-bottom:12px">Choisis 1 ou 2 domaines (musique, sport, lecture, étude…) pour gagner des points en bossant sur toi.</div><button class="btn btn-ghost" onclick="openCombats()">Choisir mes combats</button>`;return}
-  const rows=S.combats.map(id=>{const c=COMBATS.find(x=>x.id===id)||{e:'✨',n:id};const done=actionDoneToday(id);return `<div class="combat-row"><div class="cl">${c.e} ${c.n}</div><button class="cdo ${done?'done':''}" onclick="logAction('${id}')">${done?'✓ Fait':'Marquer fait'}</button></div>`}).join('');
+  const rows=S.combats.map(id=>{const c=COMBATS.find(x=>x.id===id)||{e:'✨',n:id};const done=actionDoneToday(id);return `<div class="combat-row"><div class="cl">${c.e} ${c.n}</div><button class="cdo ${done?'done':''}" onclick="${done?`undoAction('${id}')`:`logAction('${id}')`}">${done?'✓ Fait · défaire':'Marquer fait'}</button></div>`}).join('');
   card.innerHTML=`<div class="cardh"><div class="ct">🎯 Combats du mois</div><div class="cstreak">🔥 ${S.life.streak} j</div></div>${rows}<button class="lnk-edit" onclick="openCombats()">Modifier mes combats</button>`;
 }
 function renderReward(){
