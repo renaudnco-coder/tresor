@@ -453,6 +453,64 @@ function saveDebt(){
   save();closeSheet();render();toast('🛢️','Silo de remboursement créé.');
 }
 
+// ===== MODIFIER / SUPPRIMER =====
+let editTxId=null,editType='out',editCat='courses';
+function openEditTx(id){
+  const t=S.tx.find(x=>x.id===id);if(!t)return;
+  editTxId=id;editType=t.type;editCat=t.cat;
+  $('sheetBody').innerHTML=`
+    <h2>Modifier le mouvement</h2>
+    <div class="toggle">
+      <button id="etg-out" class="${t.type==='out'?'on out':''}" onclick="setEditType('out')">– Dépense</button>
+      <button id="etg-in" class="${t.type==='in'?'on in':''}" onclick="setEditType('in')">+ Revenu</button>
+    </div>
+    <div class="field"><input id="eAmt" class="amt-in" type="number" inputmode="decimal" value="${t.amount}"></div>
+    <div id="eCatWrap" style="display:${t.type==='out'?'block':'none'}"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie</label><div class="cats" id="eCatGrid"></div></div>
+    <div class="field"><input id="eNote" type="text" placeholder="Note" value="${(t.note||'').replace(/"/g,'&quot;')}"></div>
+    <button class="btn btn-pri" onclick="saveEditTx()" style="margin-bottom:10px">Enregistrer</button>
+    <button class="btn btn-red" onclick="deleteTx()">🗑️ Supprimer ce mouvement</button>`;
+  renderEditCats();openSheet();
+}
+function setEditType(t){editType=t;$('etg-out').className=t==='out'?'on out':'';$('etg-in').className=t==='in'?'on in':'';$('eCatWrap').style.display=t==='out'?'block':'none'}
+function renderEditCats(){$('eCatGrid').innerHTML=CATS.map(c=>`<div class="cat ${c.id===editCat?'on':''}" onclick="pickEditCat('${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}
+function pickEditCat(id){editCat=id;renderEditCats()}
+function saveEditTx(){
+  const t=S.tx.find(x=>x.id===editTxId);if(!t)return;
+  const newAmt=+$('eAmt').value;if(!newAmt||newAmt<=0){toast('⚠️','Entre un montant.');return}
+  S.solde+=t.type==='out'?t.amount:-t.amount;            // annule l'ancien
+  t.type=editType;t.amount=newAmt;t.cat=editType==='out'?editCat:'revenu';t.note=$('eNote').value.trim();
+  S.solde+=t.type==='out'?-t.amount:t.amount;            // applique le nouveau
+  save();closeSheet();render();toast('✏️','Mouvement modifié.');
+}
+function deleteTx(){
+  const i=S.tx.findIndex(x=>x.id===editTxId);if(i<0)return;
+  const t=S.tx[i];S.solde+=t.type==='out'?t.amount:-t.amount;
+  S.tx.splice(i,1);save();closeSheet();render();toast('🗑️','Mouvement supprimé.');
+}
+let editDebtId=null;
+function openEditDebt(id){
+  const d=S.debts.find(x=>x.id===id);if(!d)return;editDebtId=id;
+  $('sheetBody').innerHTML=`
+    <h2>Modifier la dette</h2>
+    <div class="field"><label>À qui</label><input id="edWho" type="text" value="${d.who.replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Montant total (€)</label><input id="edTotal" type="number" value="${d.total}"></div>
+    <div class="field"><label>Déjà remboursé (€)</label><input id="edPaid" type="number" value="${d.paid}"></div>
+    <button class="btn btn-pri" onclick="saveEditDebt()" style="margin-bottom:10px">Enregistrer</button>
+    <button class="btn btn-red" onclick="deleteDebt()">🗑️ Supprimer cette dette</button>`;
+  openSheet();
+}
+function saveEditDebt(){
+  const d=S.debts.find(x=>x.id===editDebtId);if(!d)return;
+  const who=$('edWho').value.trim(),total=+$('edTotal').value,paid=+$('edPaid').value||0;
+  if(!who||!total){toast('⚠️','Nom et montant requis.');return}
+  d.who=who;d.total=total;d.paid=Math.min(Math.max(0,paid),total);
+  save();closeSheet();render();toast('✏️','Dette modifiée.');
+}
+function deleteDebt(){
+  const i=S.debts.findIndex(x=>x.id===editDebtId);if(i<0)return;
+  S.debts.splice(i,1);save();closeSheet();render();toast('🗑️','Dette supprimée.');
+}
+
 // ===== GAMIFICATION =====
 function award(p){S.game.points+=p}
 function levelOf(p){return Math.floor(p/100)+1}
@@ -490,11 +548,23 @@ function openSettings(){
     <div class="field"><label>Revenus fixes / mois (€)</label><input id="se-rev" type="number" value="${S.revFixe}"></div>
     <div class="field"><label>Charges fixes / mois (€)</label><input id="se-charge" type="number" value="${S.chargeFixe}"></div>
     <div class="field"><label>Budget vie courante / mois (€)</label><input id="se-budget" type="number" value="${S.budgetVar}"></div>
-    <div class="field"><label>Palier de la tirelire (€)</label><input id="se-pal" type="number" value="${S.palier}"><div class="hint">Le montant à atteindre avant de pouvoir verser sur une dette.</div></div>
+    <div class="field"><label>Palier de la tirelire (€)</label>
+      <div class="toggle" style="margin-bottom:10px">
+        <button type="button" id="pal20" onclick="palPick(20)">20 €</button>
+        <button type="button" id="pal40" onclick="palPick(40)">40 €</button>
+        <button type="button" id="pal60" onclick="palPick(60)">60 €</button>
+        <button type="button" id="palX" onclick="palPick(0)">Autre</button>
+      </div>
+      <input id="se-pal" type="number" min="1" value="${S.palier}" oninput="palSync()">
+      <div class="hint">Le montant à atteindre avant de pouvoir verser sur une dette. « Autre » = 60 € ou plus.</div>
+    </div>
     <button class="btn btn-pri" onclick="saveSettings()">Enregistrer</button>`;
+  palSync();
   openSheet();
 }
 function saveSettings(){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);save();closeSheet();render();toast('⚙️','Montants mis à jour.')}
+function palPick(v){const inp=$('se-pal');if(v>0){inp.value=v}else{if(+inp.value<60)inp.value=60;inp.focus()}palSync()}
+function palSync(){const v=+$('se-pal').value;[['pal20',20],['pal40',40],['pal60',60]].forEach(([id,n])=>{const b=$(id);if(b)b.className=v===n?'on in':''});const x=$('palX');if(x)x.className=(v!==20&&v!==40&&v!==60)?'on in':''}
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tresor-sauvegarde.json';a.click();toast('💾','Sauvegarde téléchargée.')}
 function exportCSV(){
   if(!S.tx.length){toast('📊','Aucun mouvement à exporter.');return}
@@ -542,7 +612,7 @@ function render(){
 
   // tx
   const list=S.tx.slice(0,12);
-  $('txList').innerHTML=list.length?list.map(t=>{const c=t.type==='out'?catOf(t.cat):{e:'💰',n:'Revenu'};const d=new Date(t.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx"><div class="ic">${c.e}</div><div class="info"><div class="n">${t.note||c.n}</div><div class="m">${c.n} · ${d}</div></div><div class="amt ${t.type}">${t.type==='out'?'–':'+'}${eur(t.amount)} €</div></div>`}).join(''):'<div class="empty">Aucun mouvement.<br>Appuie sur + pour noter ta première dépense.</div>';
+  $('txList').innerHTML=list.length?list.map(t=>{const c=t.type==='out'?catOf(t.cat):{e:'💰',n:'Revenu'};const d=new Date(t.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="openEditTx(${t.id})"><div class="ic">${c.e}</div><div class="info"><div class="n">${t.note||c.n}</div><div class="m">${c.n} · ${d}</div></div><div class="amt ${t.type}">${t.type==='out'?'–':'+'}${eur(t.amount)} €</div></div>`}).join(''):'<div class="empty">Aucun mouvement.<br>Appuie sur + pour noter ta première dépense.</div>';
 
   // analyse silos
   $('anaSpent').innerHTML=eur(outM)+'<small> €</small>';
@@ -557,7 +627,7 @@ function render(){
   const reste=active.reduce((a,d)=>a+(d.total-d.paid),0);
   $('debtTotal').innerHTML=eur(reste)+'<small> €</small>';
   $('debtSub').textContent=active.length?`${active.length} silo(s) à remplir`:'Tu ne dois rien à personne 🎉';
-  $('debtList').innerHTML=S.debts.length?S.debts.map(d=>{const pct=Math.min(100,d.paid/d.total*100);const done=d.paid>=d.total;return `<div class="dsilo ${done?'done':''}"><div class="dh"><div class="who"><div class="av">${d.who.charAt(0).toUpperCase()}</div>${d.who}</div><div class="nums"><b>${eur(d.paid)}</b><span> / ${eur(d.total)} €</span></div></div><div class="track"><i style="width:${pct}%"></i></div><div class="pct">${done?'<span class="done-tag">✓ Remboursé — libéré !</span>':Math.round(pct)+'% remboursé'}</div></div>`}).join(''):'<div class="empty">Aucune dette.<br>Profite de cette liberté 💪</div>';
+  $('debtList').innerHTML=S.debts.length?S.debts.map(d=>{const pct=Math.min(100,d.paid/d.total*100);const done=d.paid>=d.total;return `<div class="dsilo ${done?'done':''}" onclick="openEditDebt(${d.id})"><div class="dh"><div class="who"><div class="av">${d.who.charAt(0).toUpperCase()}</div>${d.who}</div><div class="nums"><b>${eur(d.paid)}</b><span> / ${eur(d.total)} €</span></div></div><div class="track"><i style="width:${pct}%"></i></div><div class="pct">${done?'<span class="done-tag">✓ Remboursé — libéré !</span>':Math.round(pct)+'% remboursé'}</div></div>`}).join(''):'<div class="empty">Aucune dette.<br>Profite de cette liberté 💪</div>';
 
   // profil
   $('stPts').textContent=pts;$('stStreak').textContent=S.game.streak;$('stLvl').textContent=lvl;
