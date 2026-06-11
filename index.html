@@ -304,12 +304,12 @@
   <!-- DETTES (silos à remplir) -->
   <div class="view" id="v-dettes">
     <div class="balance" style="background:linear-gradient(160deg,#1a1a2b,#15131f)">
-      <div class="lab">Il te reste à rembourser</div>
+      <div class="lab">Objectif restant total</div>
       <div class="amt num" id="debtTotal">0<small> €</small></div>
-      <div class="sub" id="debtSub">Remplis tes silos pour t'en libérer 💪</div>
+      <div class="sub" id="debtSub">Tes projets à financer, un palier à la fois 💪</div>
     </div>
-    <button class="btn btn-ghost" style="margin-top:14px" onclick="openDebt()">+ Ajouter une dette à rembourser</button>
-    <div class="sec-t">Mes silos de remboursement</div>
+    <button class="btn btn-ghost" style="margin-top:14px" onclick="openDebt()">+ Ajouter un projet</button>
+    <div class="sec-t">Mes silos · projets</div>
     <div id="debtList"></div>
   </div>
 
@@ -386,7 +386,13 @@ function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
   if(S.tirelire===undefined)S.tirelire=0;
-  if(S.debts)S.debts=S.debts.map(d=>d.total!==undefined?d:{id:d.id,who:d.who,total:d.amount||0,paid:d.repaid?(d.amount||0):0});
+  if(S.debts)S.debts=S.debts.map(d=>{
+    if(d.goal!==undefined&&d.pot!==undefined)return d; // déjà nouveau format {name,goal,pot}
+    let total,paid;
+    if(d.total!==undefined){total=d.total;paid=d.paid||0;}
+    else{total=d.amount||0;paid=d.repaid?(d.amount||0):0;}
+    return {id:d.id,name:d.name||d.who||'Projet',goal:Math.max(0,total-paid),pot:0};
+  });
   if(!S.game.badges)S.game.badges=[];
   if(!S.combats)S.combats=[];
   if(!S.actions)S.actions=[];
@@ -458,48 +464,53 @@ function saveResist(){
   if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1400);
 }
 function openPour(){
-  const active=S.debts.filter(d=>d.paid<d.total);
+  const active=S.debts.filter(d=>d.pot<d.goal);
   if(S.tirelire<S.palier){toast('🐷',`Encore ${eur2(S.palier-S.tirelire)} € avant le prochain palier.`);return}
-  if(!active.length){toast('🎉','Aucune dette ! Ta tirelire est de l\'épargne pure.');return}
+  if(!active.length){toast('🎉','Aucun projet à financer ! Ta tirelire est de l\'épargne pure.');return}
   pourPick=active[0].id;
   $('sheetBody').innerHTML=`
     <h2>↑ Verser un palier</h2>
-    <div class="lead">Tu vas verser <b style="color:var(--violet)">${eur(S.palier)} €</b> de ta tirelire sur une dette. Choisis laquelle :</div>
+    <div class="lead">Tu vas verser <b style="color:var(--violet)">${eur(S.palier)} €</b> de ta tirelire dans un silo. Choisis lequel :</div>
     <div id="pourList"></div>
     <button class="btn btn-violet" onclick="doPour()" style="margin-top:6px">Verser ${eur(S.palier)} €</button>`;
   renderPourList();openSheet();
 }
 let pourPick=null;
 function renderPourList(){
-  const active=S.debts.filter(d=>d.paid<d.total);
-  $('pourList').innerHTML=active.map(d=>`<div class="pick-debt ${d.id===pourPick?'on':''}" onclick="pickPour(${d.id})"><div class="av">${d.who.charAt(0).toUpperCase()}</div><div style="flex:1"><div style="font-weight:600">${d.who}</div><div style="font-size:12px;color:var(--muted)">${eur(d.paid)} / ${eur(d.total)} € remboursés</div></div></div>`).join('');
+  const active=S.debts.filter(d=>d.pot<d.goal);
+  $('pourList').innerHTML=active.map(d=>`<div class="pick-debt ${d.id===pourPick?'on':''}" onclick="pickPour(${d.id})"><div class="av">${(d.name||'?').charAt(0).toUpperCase()}</div><div style="flex:1"><div style="font-weight:600">${d.name}</div><div style="font-size:12px;color:var(--muted)">${eur(d.pot)} / ${eur(d.goal)} € dans le silo</div></div></div>`).join('');
 }
 function pickPour(id){pourPick=id;renderPourList()}
 function doPour(){
   const d=S.debts.find(x=>x.id===pourPick);if(!d)return;
-  S.tirelire-=S.palier;d.paid=Math.min(d.total,d.paid+S.palier);award(15);meriteAdd(10);
+  S.tirelire-=S.palier;d.pot=Math.min(d.goal,d.pot+S.palier);award(15);meriteAdd(10);
   if(!hasBadge('palier'))giveBadge('palier');
-  const done=d.paid>=d.total;save();closeSheet();render();
-  if(done){confetti();if(!hasBadge('debtpaid'))giveBadge('debtpaid');toast('🏆',`Dette envers ${d.who} remboursée ! Libéré !`);}
-  else{toast('🪙',`Palier versé sur ${d.who} ! +15 pts`);}
+  save();closeSheet();render();
+  toast('🪙',`Palier versé dans ${d.name} ! +15 pts. Vide le silo quand tu transfères l'argent.`);
+}
+function viderSilo(id){
+  const d=S.debts.find(x=>x.id===id);if(!d||d.pot<=0)return;
+  const amt=d.pot;d.goal=Math.max(0,d.goal-d.pot);d.pot=0;award(10);
+  const done=d.goal<=0;save();render();
+  if(done){confetti();if(!hasBadge('debtpaid'))giveBadge('debtpaid');toast('🏆',`${d.name} : objectif atteint ! Bravo 🎉`);}
+  else toast('💸',`${eur2(amt)} € sortis du silo — pense à les transférer pour de vrai !`);
 }
 
 // ===== DETTES =====
 function openDebt(){
   $('sheetBody').innerHTML=`
-    <h2>Nouvelle dette</h2>
-    <div class="lead">Un silo à remplir progressivement jusqu'à ta liberté.</div>
-    <div class="field"><label>À qui dois-tu de l'argent ?</label><input id="dWho" type="text" placeholder="ex : Clément"></div>
-    <div class="field"><label>Montant total (€)</label><input id="dAmt" class="amt-in" type="number" inputmode="decimal" placeholder="0 €"></div>
-    <div class="field"><label>Déjà remboursé ? (€, optionnel)</label><input id="dPaid" type="number" inputmode="decimal" placeholder="0"></div>
+    <h2>Nouveau projet</h2>
+    <div class="lead">Un silo où canaliser tes efforts : rembourser quelqu'un, un achat, un voyage…</div>
+    <div class="field"><label>Nom du projet</label><input id="dWho" type="text" placeholder="ex : Rembourser Clément, Vacances, Matos"></div>
+    <div class="field"><label>Objectif (€)</label><input id="dAmt" class="amt-in" type="number" inputmode="decimal" placeholder="0 €"></div>
     <button class="btn btn-pri" onclick="saveDebt()">Créer le silo</button>`;
   openSheet();setTimeout(()=>$('dWho').focus(),350);
 }
 function saveDebt(){
-  const who=$('dWho').value.trim(),total=+$('dAmt').value,paid=+$('dPaid').value||0;
-  if(!who||!total){toast('⚠️','Remplis le nom et le montant.');return}
-  S.debts.push({id:Date.now(),who,total,paid:Math.min(paid,total)});
-  save();closeSheet();render();toast('🛢️','Silo de remboursement créé.');
+  const name=$('dWho').value.trim(),goal=+$('dAmt').value;
+  if(!name||!goal){toast('⚠️','Donne un nom et un objectif.');return}
+  S.debts.push({id:Date.now(),name,goal,pot:0});
+  save();closeSheet();render();toast('🛢️','Silo de projet créé.');
 }
 
 // ===== MODIFIER / SUPPRIMER =====
@@ -540,20 +551,20 @@ let editDebtId=null;
 function openEditDebt(id){
   const d=S.debts.find(x=>x.id===id);if(!d)return;editDebtId=id;
   $('sheetBody').innerHTML=`
-    <h2>Modifier la dette</h2>
-    <div class="field"><label>À qui</label><input id="edWho" type="text" value="${d.who.replace(/"/g,'&quot;')}"></div>
-    <div class="field"><label>Montant total (€)</label><input id="edTotal" type="number" value="${d.total}"></div>
-    <div class="field"><label>Déjà remboursé (€)</label><input id="edPaid" type="number" value="${d.paid}"></div>
+    <h2>Modifier le projet</h2>
+    <div class="field"><label>Nom</label><input id="edWho" type="text" value="${(d.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Objectif restant (€)</label><input id="edTotal" type="number" value="${d.goal}"></div>
+    <div class="field"><label>Accumulé dans le silo (€)</label><input id="edPaid" type="number" value="${d.pot}"></div>
     <button class="btn btn-pri" onclick="saveEditDebt()" style="margin-bottom:10px">Enregistrer</button>
-    <button class="btn btn-red" onclick="deleteDebt()">🗑️ Supprimer cette dette</button>`;
+    <button class="btn btn-red" onclick="deleteDebt()">🗑️ Supprimer ce projet</button>`;
   openSheet();
 }
 function saveEditDebt(){
   const d=S.debts.find(x=>x.id===editDebtId);if(!d)return;
-  const who=$('edWho').value.trim(),total=+$('edTotal').value,paid=+$('edPaid').value||0;
-  if(!who||!total){toast('⚠️','Nom et montant requis.');return}
-  d.who=who;d.total=total;d.paid=Math.min(Math.max(0,paid),total);
-  save();closeSheet();render();toast('✏️','Dette modifiée.');
+  const name=$('edWho').value.trim(),goal=+$('edTotal').value,pot=+$('edPaid').value||0;
+  if(!name||!goal){toast('⚠️','Nom et objectif requis.');return}
+  d.name=name;d.goal=goal;d.pot=Math.min(Math.max(0,pot),goal);
+  save();closeSheet();render();toast('✏️','Projet modifié.');
 }
 function deleteDebt(){
   const i=S.debts.findIndex(x=>x.id===editDebtId);if(i<0)return;
@@ -808,7 +819,7 @@ function render(){
   const ready=Math.floor(S.tirelire/S.palier);
   $('palFill').style.width=(ready>=1?100:palProg)+'%';
   $('palInfo').innerHTML=ready>=1?`🪙 <b style="color:var(--violet)">${ready} palier(s) de ${S.palier} €</b> prêt(s) à verser !`:`Plus que <b style="color:var(--text)">${eur2(S.palier-(S.tirelire%S.palier))} €</b> avant ton prochain palier de ${S.palier} €.`;
-  $('pourBtn').disabled=!(ready>=1&&S.debts.some(d=>d.paid<d.total));
+  $('pourBtn').disabled=!(ready>=1&&S.debts.some(d=>d.pot<d.goal));
 
   // projection
   const p=projection();$('proj').className='alert '+p.cls;$('proj').querySelector('.ic').textContent=p.ic;$('projT').textContent=p.t;$('projD').innerHTML=p.d;
@@ -826,11 +837,11 @@ function render(){
   $('siloRow').innerHTML=entries.length?entries.map(([cid,val])=>{const c=catOf(cid);const h=Math.min(100,val/maxRef*100);const cls=h>90?'r':h>65?'a':h>35?'':'g';return `<div class="silo" onclick="openCatDetail('${cid}')" style="cursor:pointer"><div class="tube"><div class="e">${c.e}</div><div class="fill ${cls}" style="height:${Math.max(6,h)}%"></div></div><div class="amt">${eur(val)} €</div><div class="n">${c.n}</div></div>`}).join(''):'<div class="empty" style="flex:1">Aucune dépense ce mois.<br>Tes silos sont vides 🫙</div>';
 
   // dettes
-  const active=S.debts.filter(d=>d.paid<d.total);
-  const reste=active.reduce((a,d)=>a+(d.total-d.paid),0);
+  const active=S.debts.filter(d=>d.goal>0);
+  const reste=active.reduce((a,d)=>a+d.goal,0);
   $('debtTotal').innerHTML=eur(reste)+'<small> €</small>';
-  $('debtSub').textContent=active.length?`${active.length} silo(s) à remplir`:'Tu ne dois rien à personne 🎉';
-  $('debtList').innerHTML=S.debts.length?S.debts.map(d=>{const pct=Math.min(100,d.paid/d.total*100);const done=d.paid>=d.total;return `<div class="dsilo ${done?'done':''}" onclick="openEditDebt(${d.id})"><div class="dh"><div class="who"><div class="av">${d.who.charAt(0).toUpperCase()}</div>${d.who}</div><div class="nums"><b>${eur(d.paid)}</b><span> / ${eur(d.total)} €</span></div></div><div class="track"><i style="width:${pct}%"></i></div><div class="pct">${done?'<span class="done-tag">✓ Remboursé — libéré !</span>':Math.round(pct)+'% remboursé'}</div></div>`}).join(''):'<div class="empty">Aucune dette.<br>Profite de cette liberté 💪</div>';
+  $('debtSub').textContent=active.length?`${active.length} projet(s) en cours`:'Aucun projet en cours 🎉';
+  $('debtList').innerHTML=S.debts.length?S.debts.map(d=>{const pct=d.goal>0?Math.min(100,d.pot/d.goal*100):100;const done=d.goal<=0;const vider=d.pot>0&&!done?`<button class="claim-btn" style="margin-top:10px;background:linear-gradient(180deg,#8fd0ff,var(--blue));color:#05223a" onclick="viderSilo(${d.id})">💸 Vider le silo (${eur2(d.pot)} €)</button>`:'';return `<div class="dsilo ${done?'done':''}"><div class="dh" onclick="openEditDebt(${d.id})" style="cursor:pointer"><div class="who"><div class="av">${(d.name||'?').charAt(0).toUpperCase()}</div>${d.name}</div><div class="nums"><b>${eur(d.pot)}</b><span> / ${eur(d.goal)} €</span></div></div><div class="track"><i style="width:${pct}%"></i></div><div class="pct">${done?'<span class="done-tag">✓ Objectif atteint !</span>':(d.pot>0?'Prêt à vider 💸':'En attente de versements')}</div>${vider}</div>`}).join(''):'<div class="empty">Aucun projet.<br>Crée un silo pour canaliser tes efforts 💪</div>';
 
   // profil
   $('stPts').textContent=pts;$('stStreak').textContent=S.game.streak;$('stLvl').textContent=lvl;
