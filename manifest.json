@@ -1,0 +1,13 @@
+{
+  "name": "Trésor — Mes finances",
+  "short_name": "Trésor",
+  "description": "Reprends le contrôle de tes finances. Budget, dépenses, dettes — en privé, sur ton appareil.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0E1116",
+  "theme_color": "#0E1116",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
