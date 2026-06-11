@@ -63,6 +63,24 @@
   .pour-btn{background:var(--violet);color:#16092e}
   .pour-btn:disabled{opacity:.4;cursor:not-allowed}
 
+  /* COMBATS + RÉCOMPENSE */
+  .lifecard{margin-top:14px;background:linear-gradient(160deg,#16221c,#141b18);border:1px solid rgba(52,211,153,.22);border-radius:18px;padding:18px 20px}
+  .rewardcard{margin-top:14px;background:linear-gradient(160deg,#221d14,#1b1812);border:1px solid rgba(255,203,107,.25);border-radius:18px;padding:18px 20px}
+  .cardh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .cardh .ct{font-size:15px;font-weight:600}
+  .cardh .cstreak{font-size:13px;color:var(--amber);font-weight:600}
+  .combat-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line)}
+  .combat-row .cl{font-size:15px}
+  .cdo{background:var(--green-d);color:var(--green);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif}
+  .cdo.done{background:transparent;color:var(--muted);border-color:var(--line);cursor:default}
+  .lnk-edit{background:none;border:none;color:var(--muted);font-size:12px;margin-top:10px;cursor:pointer;font-family:'Inter',sans-serif;text-decoration:underline;padding:0}
+  .rh{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .rh .rp{font-weight:600;font-size:15px}
+  .rh .ru{font-size:12px;color:var(--gold)}
+  .merite-bar{height:12px;border-radius:50px;background:rgba(255,255,255,.07);overflow:hidden;margin:12px 0 8px}
+  .merite-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--amber));border-radius:50px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+  .claim-btn{background:linear-gradient(180deg,#ffd784,var(--gold));color:#2a1c00;width:100%;border:none;border-radius:12px;padding:13px;font-weight:700;cursor:pointer;font-family:'Inter',sans-serif;margin-top:6px}
+
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
   .alert.good{background:var(--green-d);border-color:rgba(52,211,153,.3)}
   .alert.warn{background:var(--amber-d);border-color:rgba(251,191,36,.3)}
@@ -244,6 +262,9 @@
       </div>
     </div>
 
+    <div class="lifecard" id="combatCard"></div>
+    <div class="rewardcard" id="rewardCard"></div>
+
     <div class="alert" id="proj"><div class="ic">📊</div><div><div class="t" id="projT">—</div><div class="d" id="projD">—</div></div></div>
 
     <div class="simu">
@@ -332,20 +353,30 @@ const BADGES=[
   {id:'resist',e:'💪',n:'Volonté',d:'1re résistance'},
   {id:'palier',e:'🪙',n:'Palier',d:'1er palier versé'},
   {id:'debtpaid',e:'🏆',n:'Libéré',d:'1 dette remboursée'},
+  {id:'combat',e:'🎯',n:'Combattant',d:'1re action de vie'},
+  {id:'reward',e:'🎁',n:'Mérité',d:'1re récompense'},
   {id:'streak7',e:'🔥',n:'Assidu',d:'7 jours de suite'},
   {id:'lvl5',e:'👑',n:'Expert',d:'Niveau 5 atteint'}
+];
+const COMBATS=[
+  {id:'musique',e:'🎵',n:'Musique'},{id:'sport',e:'🏋️',n:'Sport'},
+  {id:'lecture',e:'📖',n:'Lecture'},{id:'etude',e:'🎓',n:'Étude'},{id:'autre',e:'✨',n:'Autre'}
 ];
 let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,tx:[],debts:[],game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,tx:[],debts:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
   if(S.tirelire===undefined)S.tirelire=0;
   if(S.debts)S.debts=S.debts.map(d=>d.total!==undefined?d:{id:d.id,who:d.who,total:d.amount||0,paid:d.repaid?(d.amount||0):0});
   if(!S.game.badges)S.game.badges=[];
+  if(!S.combats)S.combats=[];
+  if(!S.actions)S.actions=[];
+  if(!S.life)S.life={streak:0,lastDay:null};
+  if(!S.reward)S.reward={project:'',merite:0,threshold:100,unlocked:0};
 }
 
 const $=id=>document.getElementById(id);
@@ -403,7 +434,7 @@ function openResist(){
 }
 function saveResist(){
   const amt=+$('rAmt').value;if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
-  S.tirelire+=amt;award(Math.max(3,Math.round(amt)));bumpStreak();
+  S.tirelire+=amt;award(Math.max(3,Math.round(amt)));meriteAdd(Math.max(2,Math.round(amt/2)));bumpStreak();
   if(!hasBadge('resist'))giveBadge('resist');save();closeSheet();render();
   toast('🐷',`+${eur2(amt)} € dans la tirelire ! Beau réflexe.`);
   if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1400);
@@ -428,7 +459,7 @@ function renderPourList(){
 function pickPour(id){pourPick=id;renderPourList()}
 function doPour(){
   const d=S.debts.find(x=>x.id===pourPick);if(!d)return;
-  S.tirelire-=S.palier;d.paid=Math.min(d.total,d.paid+S.palier);award(15);
+  S.tirelire-=S.palier;d.paid=Math.min(d.total,d.paid+S.palier);award(15);meriteAdd(10);
   if(!hasBadge('palier'))giveBadge('palier');
   const done=d.paid>=d.total;save();closeSheet();render();
   if(done){confetti();if(!hasBadge('debtpaid'))giveBadge('debtpaid');toast('🏆',`Dette envers ${d.who} remboursée ! Libéré !`);}
@@ -518,6 +549,37 @@ const LVLNAMES=['Apprenti','Économe','Stratège','Maître','Sage','Légende'];
 function bumpStreak(){const t=todayStr(),last=S.game.lastDay;if(last===t)return;const y=new Date(Date.now()-864e5).toISOString().slice(0,10);S.game.streak=(last===y)?S.game.streak+1:1;S.game.lastDay=t;if(S.game.streak>=7&&!hasBadge('streak7'))giveBadge('streak7')}
 function hasBadge(id){return S.game.badges.includes(id)}
 function giveBadge(id){if(hasBadge(id))return;S.game.badges.push(id);const b=BADGES.find(x=>x.id===id);setTimeout(()=>toast(b.e,`Badge débloqué : ${b.n} !`),900)}
+
+// ===== COMBATS (actions de vie) =====
+let combatSel=[];
+function openCombats(){
+  combatSel=[...S.combats];
+  $('sheetBody').innerHTML=`<h2>Choisis tes combats</h2><div class="lead">Maximum 2. Tes domaines de développement perso — chaque action faite te rapporte des points positifs.</div><div class="cats" id="combatGrid" style="grid-template-columns:repeat(3,1fr)"></div><button class="btn btn-pri" onclick="saveCombats()" style="margin-top:6px">Valider</button>`;
+  renderCombatGrid();openSheet();
+}
+function renderCombatGrid(){$('combatGrid').innerHTML=COMBATS.map(c=>`<div class="cat ${combatSel.includes(c.id)?'on':''}" onclick="toggleCombat('${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}
+function toggleCombat(id){const i=combatSel.indexOf(id);if(i>=0)combatSel.splice(i,1);else{if(combatSel.length>=2){toast('🎯','Maximum 2 combats.');return}combatSel.push(id)}renderCombatGrid()}
+function saveCombats(){S.combats=combatSel;save();closeSheet();render();toast('🎯','Combats choisis ! Au boulot 💪')}
+function actionDoneToday(id){const t=todayStr();return S.actions.some(a=>a.date===t&&a.combat===id)}
+function bumpLifeStreak(){const t=todayStr(),last=S.life.lastDay;if(last===t)return;const y=new Date(Date.now()-864e5).toISOString().slice(0,10);S.life.streak=(last===y)?S.life.streak+1:1;S.life.lastDay=t}
+function logAction(id){
+  if(actionDoneToday(id)){toast('✅','Déjà fait aujourd\'hui !');return}
+  S.actions.push({date:todayStr(),combat:id});award(10);meriteAdd(10);bumpLifeStreak();
+  if(!hasBadge('combat'))giveBadge('combat');save();render();
+  const c=COMBATS.find(x=>x.id===id)||{n:id};toast('🎯',`${c.n} : fait ! +10 pts de mérite 💪`);
+}
+
+// ===== RÉCOMPENSE =====
+function meriteAdd(n){if(!S.reward)return;S.reward.merite+=n}
+function openReward(){
+  $('sheetBody').innerHTML=`<h2>Mon projet récompense</h2><div class="lead">Quand tu gères bien (finances + combats), tu débloques un craquage légitime pour ce projet.</div>
+    <div class="field"><label>Mon projet plaisir</label><input id="rwProj" type="text" placeholder="ex : Déco de l'appart" value="${(S.reward.project||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Effort par récompense (points de mérite)</label><input id="rwThr" type="number" value="${S.reward.threshold}"><div class="hint">Plus c'est haut, plus la récompense se mérite. (~10 pts par action / résistance)</div></div>
+    <button class="btn btn-pri" onclick="saveReward()">Enregistrer</button>`;
+  openSheet();
+}
+function saveReward(){S.reward.project=$('rwProj').value.trim();S.reward.threshold=Math.max(20,+$('rwThr').value||100);save();closeSheet();render();toast('🎁','Projet récompense défini !')}
+function claimReward(){if(S.reward.merite<S.reward.threshold)return;S.reward.merite-=S.reward.threshold;S.reward.unlocked++;if(!hasBadge('reward'))giveBadge('reward');save();render();confetti();toast('🎁',`Craquage mérité débloqué pour : ${S.reward.project} ! 🎉`)}
 
 // ===== PROJECTION =====
 function projection(){
@@ -633,6 +695,20 @@ function render(){
   $('stPts').textContent=pts;$('stStreak').textContent=S.game.streak;$('stLvl').textContent=lvl;
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
+
+  renderCombats();renderReward();
+}
+function renderCombats(){
+  const card=$('combatCard');
+  if(!S.combats.length){card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats</div></div><div class="hint" style="margin-bottom:12px">Choisis 1 ou 2 domaines (musique, sport, lecture, étude…) pour gagner des points en bossant sur toi.</div><button class="btn btn-ghost" onclick="openCombats()">Choisir mes combats</button>`;return}
+  const rows=S.combats.map(id=>{const c=COMBATS.find(x=>x.id===id)||{e:'✨',n:id};const done=actionDoneToday(id);return `<div class="combat-row"><div class="cl">${c.e} ${c.n}</div><button class="cdo ${done?'done':''}" onclick="logAction('${id}')">${done?'✓ Fait':'Marquer fait'}</button></div>`}).join('');
+  card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats du jour</div><div class="cstreak">🔥 ${S.life.streak} j</div></div>${rows}<button class="lnk-edit" onclick="openCombats()">Modifier mes combats</button>`;
+}
+function renderReward(){
+  const card=$('rewardCard');
+  if(!S.reward.project){card.innerHTML=`<div class="cardh"><div class="ct">🎁 Ma récompense</div></div><div class="hint" style="margin-bottom:12px">Définis un projet plaisir (déco, sortie, matos…). En gérant bien, tu débloques un craquage légitime — quitte à manger des pâtes 😄</div><button class="btn btn-ghost" onclick="openReward()">Définir mon projet</button>`;return}
+  const m=S.reward.merite,thr=S.reward.threshold,pct=Math.min(100,m/thr*100),ready=m>=thr;
+  card.innerHTML=`<div class="rh"><div class="rp">🎁 ${S.reward.project}</div>${S.reward.unlocked>0?`<div class="ru">🏅 ${S.reward.unlocked} débloqué(s)</div>`:''}</div><div class="merite-bar"><i style="width:${pct}%"></i></div><div class="hint">${ready?'Tu l\'as mérité ! Encaisse ton craquage 🎉':`Encore <b style="color:var(--text)">${Math.max(0,Math.round(thr-m))} pts de mérite</b> avant ta récompense.`}</div>${ready?`<button class="claim-btn" onclick="claimReward()">🎉 Encaisser mon craquage mérité</button>`:''}<button class="lnk-edit" onclick="openReward()">Modifier le projet</button>`;
 }
 
 // ===== DICTÉE VOCALE (talkie : maintiens pour parler) =====
@@ -681,7 +757,7 @@ function parseVoice(txt){
     const paye=amounts[0], evite=amounts[1];
     const eco=Math.abs(evite-paye);
     if(eco>0){
-      S.tirelire+=eco;award(Math.max(3,Math.round(eco)));bumpStreak();
+      S.tirelire+=eco;award(Math.max(3,Math.round(eco)));meriteAdd(Math.max(2,Math.round(eco/2)));bumpStreak();
       if(!hasBadge('resist'))giveBadge('resist');save();render();
       toast('🐀',`Malin ! +${eur2(eco)} € économisés dans la tirelire.`);
       if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1500);

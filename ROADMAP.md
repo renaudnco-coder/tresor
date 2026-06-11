@@ -19,8 +19,8 @@ L'esprit du projet : un **ange gardien financier** qui aide à prévoir, rester 
 ## 🟢 Phase 1 — Quick wins (sans serveur)
 - [x] **Modifier / supprimer** une dépense, un revenu, une dette (corriger ses erreurs)
 - [x] **Choix de paliers** : 20 / 40 / 60 / Autre (≥ 60)
-- [ ] **Actions de vie valorisées** : choisir 1-2 « combats » (musique, sport, lecture, étude, autre) → gagner des points de développement perso
-- [ ] **Système de récompense / « craquage mérité »** : bonne hygiène (finances + actions de vie) → débloque une dépense-plaisir légitime le mois suivant, dans un **projet choisi** (ex : déco de l'appart)
+- [x] **Actions de vie valorisées** : choisir 1-2 « combats » (musique, sport, lecture, étude, autre) → gagner des points de développement perso
+- [x] **Système de récompense / « craquage mérité »** : bonne hygiène (finances + actions de vie) → débloque une dépense-plaisir légitime, dans un **projet choisi** (ex : déco de l'appart)
 - [ ] **Onglet « Dépenses probables »** (saisie manuelle d'abord)
 - [ ] Remplacer le message « tu tiens le cap » par quelque chose d'utile
 
