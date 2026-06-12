@@ -86,6 +86,16 @@
   .pts-preview{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:36px;font-weight:600;color:var(--green);margin:4px 0 16px}
   .pts-preview small{font-size:16px;color:var(--muted);font-weight:500}
   input[type=range]{accent-color:var(--green);height:26px}
+  .bell{position:relative;width:42px;height:42px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .bell svg{width:21px;height:21px;fill:none;stroke:var(--text);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .bell .bdot{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--red);border:2px solid var(--bg);display:none}
+  .bell .bdot.on{display:block}
+  .swipe-card{margin-top:14px;border-radius:18px;padding:30px 24px;text-align:center;background:linear-gradient(160deg,#1b2440,#141a30);border:1px solid var(--line-2,rgba(140,160,220,.22))}
+  .swipe-card .se{font-size:34px;margin-bottom:10px}
+  .swipe-card .st{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin-bottom:6px}
+  .swipe-card .sd{color:var(--muted);font-size:14px;text-transform:capitalize}
+  .cal-chips{display:flex;gap:8px;margin-top:8px}
+  .cal-chips button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:9px 0;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer}
 
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
   .alert.good{background:var(--green-d);border-color:rgba(52,211,153,.3)}
@@ -242,9 +252,12 @@
 <div class="app" id="app">
   <div class="top">
     <div><div class="hi" id="greet">Salut 👋</div><h1 id="dateLbl">Ton trésor</h1></div>
+    <div style="display:flex;align-items:center;gap:10px">
+    <button class="bell" id="bell" onclick="onBell()" title="Engagements à estimer"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bdot" id="bellDot"></span></button>
     <div class="lvl" onclick="go('profil')">
       <div class="ring" id="lvlRing"><i id="lvlNum">1</i></div>
       <div class="lbl"><b id="lvlName">Apprenti</b><span id="lvlPts">0 pts</span></div>
+    </div>
     </div>
   </div>
 
@@ -381,7 +394,7 @@ let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -400,6 +413,8 @@ function migrate(){
   if(!S.reward)S.reward={project:'',merite:0,threshold:100,unlocked:0};
   if(!S.planned)S.planned=[];
   if(!S.piggyLog)S.piggyLog=[];
+  if(S.icsUrl===undefined)S.icsUrl='';
+  if(!S.calProcessed)S.calProcessed=[];
 }
 
 const $=id=>document.getElementById(id);
@@ -770,13 +785,14 @@ function openSettings(){
         <button type="button" id="palX" onclick="palPick(0)">Autre</button>
       </div>
       <input id="se-pal" type="number" min="1" value="${S.palier}" oninput="palSync()">
-      <div class="hint">Le montant à atteindre avant de pouvoir verser sur une dette. « Autre » = 60 € ou plus.</div>
+      <div class="hint">Le montant à atteindre avant de pouvoir verser dans un silo. « Autre » = 60 € ou plus.</div>
     </div>
+    <div class="field"><label>📅 Mon agenda (lien iCal secret)</label><input id="se-ics" type="url" placeholder="https://calendar.google.com/.../basic.ics" value="${(S.icsUrl||'').replace(/"/g,'&quot;')}"><div class="hint">Google Agenda → Paramètres du calendrier → « Adresse secrète au format iCal ». Colle-la ici pour que l'app estime tes engagements à venir.</div></div>
     <button class="btn btn-pri" onclick="saveSettings()">Enregistrer</button>`;
   palSync();
   openSheet();
 }
-function saveSettings(){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);save();closeSheet();render();toast('⚙️','Montants mis à jour.')}
+function saveSettings(){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);const ics=$('se-ics');if(ics)S.icsUrl=ics.value.trim();save();closeSheet();render();toast('⚙️','Réglages mis à jour.');if(S.icsUrl)checkCalendar()}
 function palPick(v){const inp=$('se-pal');if(v>0){inp.value=v}else{if(+inp.value<60)inp.value=60;inp.focus()}palSync()}
 function palSync(){const v=+$('se-pal').value;[['pal20',20],['pal40',40],['pal60',60]].forEach(([id,n])=>{const b=$(id);if(b)b.className=v===n?'on in':''});const x=$('palX');if(x)x.className=(v!==20&&v!==40&&v!==60)?'on in':''}
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tresor-sauvegarde.json';a.click();toast('💾','Sauvegarde téléchargée.')}
@@ -981,8 +997,54 @@ mf.addEventListener('pointerleave',holdEnd);
 mf.addEventListener('pointercancel',holdEnd);
 mf.addEventListener('contextmenu',e=>e.preventDefault());
 
+// ===== AGENDA → DÉPENSES PROBABLES (cloche + cartes + roulette) =====
+let calPending=[],calIdx=0,calAmt=10;
+async function checkCalendar(){
+  if(!S.icsUrl)return;
+  try{
+    const r=await fetch('/api/calendar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ics:S.icsUrl})});
+    const j=await r.json();if(!r.ok||!j.events)return;
+    calPending=j.events.filter(e=>!S.calProcessed.includes(e.uid));
+    updateBell();
+    if(calPending.length)toast('🔔',`${calPending.length} engagement(s) à estimer.`);
+  }catch(e){}
+}
+function updateBell(){const d=$('bellDot');if(d)d.classList.toggle('on',calPending.length>0)}
+function onBell(){
+  if(!S.icsUrl){openSettings();setTimeout(()=>{const i=$('se-ics');if(i)i.focus()},400);toast('📅','Ajoute ton lien agenda dans les réglages.');return}
+  if(!calPending.length){checkCalendar();toast('🔔','Rien de nouveau pour l\'instant.');return}
+  calIdx=0;renderSwipeCard();openSheet();
+}
+function renderSwipeCard(){
+  const ev=calPending[calIdx];
+  if(!ev){updateBell();closeSheet();toast('📅','Prévisions à jour ! 🎉');return}
+  calAmt=10;
+  const d=new Date(ev.start).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  $('sheetBody').innerHTML=`
+    <h2>📅 Combien ça va coûter ?</h2>
+    <div class="lead">${calIdx+1}/${calPending.length} · estime le coût de cet engagement</div>
+    <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
+    <div class="field" style="margin-top:16px"><label>Estimation : <b id="calAmtLbl">${eur(calAmt)} €</b></label>
+      <input id="calRange" type="range" min="0" max="200" step="5" value="${calAmt}" oninput="calAmt=+this.value;document.getElementById('calAmtLbl').textContent=eur(calAmt)+' €'"></div>
+    <div class="cal-chips">${[0,10,20,50,100].map(v=>`<button onclick="calAmt=${v};document.getElementById('calRange').value=${v};document.getElementById('calAmtLbl').textContent=eur(${v})+' €'">${v} €</button>`).join('')}</div>
+    <div style="display:flex;gap:12px;margin-top:18px">
+      <button class="btn btn-ghost" style="flex:1" onclick="calSkip()">✕ Gratuit</button>
+      <button class="btn btn-pri" style="flex:1" onclick="calAdd()">✓ Prévoir</button>
+    </div>`;
+}
+function calAdd(){
+  const ev=calPending[calIdx];if(!ev)return;
+  if(calAmt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:calAmt,date:ev.start});
+  S.calProcessed.push(ev.uid);calIdx++;save();render();renderSwipeCard();
+  if(calAmt>0)toast('📅',`${eur(calAmt)} € ajoutés à tes dépenses prévues.`);
+}
+function calSkip(){
+  const ev=calPending[calIdx];if(!ev)return;
+  S.calProcessed.push(ev.uid);calIdx++;save();render();renderSwipeCard();
+}
+
 migrate();
-if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render()}
+if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();if(S.icsUrl)setTimeout(checkCalendar,900)}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
 </body>
