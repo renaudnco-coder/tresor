@@ -30,7 +30,7 @@
   .app{max-width:480px;margin:0 auto;min-height:100vh;position:relative;padding-bottom:96px}
   .num{font-family:'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}
 
-  .top{padding:26px 20px 8px;display:flex;justify-content:space-between;align-items:flex-start}
+  .top{padding:calc(env(safe-area-inset-top) + 18px) 20px 8px;display:flex;justify-content:space-between;align-items:flex-start}
   .top .hi{font-size:13px;color:var(--muted)}
   .top h1{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin-top:2px;text-transform:capitalize}
   .lvl{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);padding:7px 12px;border-radius:50px;cursor:pointer}
@@ -96,6 +96,21 @@
   .swipe-card .sd{color:var(--muted);font-size:14px;text-transform:capitalize}
   .cal-chips{display:flex;gap:8px;margin-top:8px}
   .cal-chips button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:9px 0;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer}
+  /* MOLETTE à graduations */
+  .wheel-val{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:600;margin-bottom:6px;color:var(--green)}
+  .wheel-val small{font-size:18px;color:var(--muted);font-weight:500}
+  .wheel{position:relative;height:62px;overflow-x:scroll;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:14px;background:var(--card-2);border:1px solid var(--line);touch-action:pan-x}
+  .wheel::-webkit-scrollbar{display:none}
+  .wheel::before,.wheel::after{content:'';position:sticky;top:0;height:100%;width:34px;z-index:2;pointer-events:none;display:inline-block;vertical-align:top}
+  .wheel::before{left:0;background:linear-gradient(90deg,var(--card-2),transparent)}
+  .wheel::after{right:0;background:linear-gradient(270deg,var(--card-2),transparent)}
+  .wheel-track{display:flex;align-items:flex-end;height:100%;padding-bottom:9px}
+  .tick{flex:0 0 14px;display:flex;justify-content:center;align-items:flex-end;scroll-snap-align:center;position:relative}
+  .tick i{width:2px;height:11px;background:rgba(140,160,200,.3);border-radius:2px}
+  .tick.major i{height:22px;background:var(--muted)}
+  .tick.major span{position:absolute;top:0;font-size:10px;color:var(--muted);white-space:nowrap}
+  .wheel-spacer{flex:0 0 auto}
+  .wheel-needle{position:absolute;top:7px;bottom:7px;left:50%;width:3px;margin-left:-1.5px;background:var(--green);border-radius:2px;z-index:3;pointer-events:none;box-shadow:0 0 10px var(--green)}
 
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
   .alert.good{background:var(--green-d);border-color:rgba(52,211,153,.3)}
@@ -424,6 +439,30 @@ const todayStr=()=>new Date().toISOString().slice(0,10);
 const monthOf=d=>d.slice(0,7);
 function catOf(id){return CATS.find(c=>c.id===id)||CATS[CATS.length-1]}
 
+// ===== MOLETTE à graduations (réutilisable) =====
+const WHEELS={};
+function round2(x){return Math.round(x*100)/100}
+function wheelMarkup(id,o){WHEELS[id]=o;return `<div class="wheel-val"><span id="${id}-val"></span></div><div class="wheel" id="${id}"><div class="wheel-track"></div><div class="wheel-needle"></div></div>`}
+function initWheel(id){
+  const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);if(!w)return;
+  const track=w.querySelector('.wheel-track');const tickW=14;
+  const n=Math.round((cfg.max-cfg.min)/cfg.step);
+  let html=`<div class="wheel-spacer" id="${id}-sl"></div>`;
+  for(let i=0;i<=n;i++){const v=round2(cfg.min+i*cfg.step);const major=i%cfg.majorEvery===0;html+=`<div class="tick ${major?'major':''}"><i></i>${major?`<span>${cfg.majorLabel?cfg.majorLabel(v):v}</span>`:''}</div>`;}
+  html+=`<div class="wheel-spacer" id="${id}-sr"></div>`;
+  track.innerHTML=html;w._val=cfg.value;
+  requestAnimationFrame(()=>{
+    const ww=w.clientWidth,pad=Math.max(0,ww/2-tickW/2);
+    const sl=document.getElementById(id+'-sl'),sr=document.getElementById(id+'-sr');
+    if(sl)sl.style.width=pad+'px';if(sr)sr.style.width=pad+'px';
+    w.scrollLeft=Math.round((cfg.value-cfg.min)/cfg.step)*tickW;paintWheel(id);
+    w.addEventListener('scroll',()=>{const i=Math.round(w.scrollLeft/tickW);w._val=round2(Math.min(cfg.max,Math.max(cfg.min,cfg.min+i*cfg.step)));paintWheel(id)});
+  });
+}
+function paintWheel(id){const cfg=WHEELS[id],w=document.getElementById(id);if(!cfg||!w)return;const lbl=document.getElementById(id+'-val');if(lbl)lbl.innerHTML=cfg.fmt(w._val);if(cfg.onChange)cfg.onChange(w._val)}
+function wheelValue(id){const w=document.getElementById(id);return w&&w._val!==undefined?w._val:(WHEELS[id]?WHEELS[id].value:0)}
+function setWheel(id,v){const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);w.scrollTo({left:Math.round((v-cfg.min)/cfg.step)*14,behavior:'smooth'});w._val=v;paintWheel(id)}
+
 function finishOnboarding(){
   S=fresh();
   S.solde=+$('ob-solde').value||0;S.revFixe=+$('ob-rev').value||0;
@@ -686,23 +725,24 @@ function logAction(id){
 }
 function fmtH(h){return h<1?Math.round(h*60)+' min':((h%1?h.toFixed(2).replace(/0$/,'').replace('.',','):h)+' h')}
 function combatPoints(){const hp=Math.round(combatPick.hours*8);const sp=combatPick.satis*4;const sb=Math.min(S.life.streak,10);return hp+sp+sb}
-function renderPtsLive(){const e=$('ptsLive');if(e)e.textContent=combatPoints();const l=$('hrLbl');if(l)l.textContent=fmtH(combatPick.hours)}
+function renderPtsLive(){const e=$('ptsLive');if(e)e.textContent=combatPoints()}
 function renderCombatDone(){
   const c=COMBATS.find(x=>x.id===combatPick.id)||{e:'✨',n:''};
   const faces=['😐','🙂','😀','😍','🤩'];
   $('sheetBody').innerHTML=`
     <h2>${c.e} ${c.n} — fait !</h2>
-    <div class="lead">Note ta session : tu gagnes des points à ta juste mesure.</div>
-    <div class="field"><label>Temps passé : <b id="hrLbl">${fmtH(combatPick.hours)}</b></label>
-      <input id="hrRange" type="range" min="0.25" max="5" step="0.25" value="${combatPick.hours}" oninput="combatPick.hours=+this.value;renderPtsLive()"></div>
+    <div class="lead">Fais glisser la molette : tu gagnes des points à ta juste mesure.</div>
+    <div class="field"><label>Temps passé</label>${wheelMarkup('hrWheel',{min:0,max:5,step:0.25,value:combatPick.hours,majorEvery:4,fmt:fmtH,majorLabel:v=>v+'h',onChange:v=>{combatPick.hours=v;renderPtsLive()}})}</div>
     <div class="field"><label>Satisfaction de toi</label>
-      <div class="faces">${faces.map((f,i)=>`<button type="button" class="face ${combatPick.satis===i+1?'on':''}" onclick="combatPick.satis=${i+1};renderCombatDone()">${f}</button>`).join('')}</div></div>
+      <div class="faces">${faces.map((f,i)=>`<button type="button" class="face ${combatPick.satis===i+1?'on':''}" onclick="combatPick.hours=wheelValue('hrWheel');combatPick.satis=${i+1};renderCombatDone()">${f}</button>`).join('')}</div></div>
     <div class="pts-preview">+<span id="ptsLive">${combatPoints()}</span> <small>pts</small></div>
     <div class="hint" style="text-align:center;margin-bottom:14px">🔥 Bonus de série : +${Math.min(S.life.streak,10)} pts</div>
     <button class="btn btn-pri" onclick="confirmCombat()">Valider ma session</button>`;
+  initWheel('hrWheel');
 }
 function confirmCombat(){
   const id=combatPick.id;if(!id||actionDoneToday(id)){closeSheet();return}
+  combatPick.hours=wheelValue('hrWheel');
   const pts=combatPoints();
   S.actions.push({date:todayStr(),combat:id,hours:combatPick.hours,satis:combatPick.satis,pts});
   award(pts);meriteAdd(Math.round(pts/2));bumpLifeStreak();
@@ -1018,25 +1058,25 @@ function onBell(){
 function renderSwipeCard(){
   const ev=calPending[calIdx];
   if(!ev){updateBell();closeSheet();toast('📅','Prévisions à jour ! 🎉');return}
-  calAmt=10;
   const d=new Date(ev.start).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
   $('sheetBody').innerHTML=`
     <h2>📅 Combien ça va coûter ?</h2>
-    <div class="lead">${calIdx+1}/${calPending.length} · estime le coût de cet engagement</div>
+    <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
     <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
-    <div class="field" style="margin-top:16px"><label>Estimation : <b id="calAmtLbl">${eur(calAmt)} €</b></label>
-      <input id="calRange" type="range" min="0" max="200" step="5" value="${calAmt}" oninput="calAmt=+this.value;document.getElementById('calAmtLbl').textContent=eur(calAmt)+' €'"></div>
-    <div class="cal-chips">${[0,10,20,50,100].map(v=>`<button onclick="calAmt=${v};document.getElementById('calRange').value=${v};document.getElementById('calAmtLbl').textContent=eur(${v})+' €'">${v} €</button>`).join('')}</div>
+    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:0,max:200,step:5,value:10,majorEvery:10,fmt:v=>eur(v)+' <small>€</small>',majorLabel:v=>v,onChange:()=>{}})}</div>
+    <div class="cal-chips" style="margin-top:10px">${[0,10,20,50,100].map(v=>`<button onclick="setWheel('calWheel',${v})">${v} €</button>`).join('')}</div>
     <div style="display:flex;gap:12px;margin-top:18px">
       <button class="btn btn-ghost" style="flex:1" onclick="calSkip()">✕ Gratuit</button>
       <button class="btn btn-pri" style="flex:1" onclick="calAdd()">✓ Prévoir</button>
     </div>`;
+  initWheel('calWheel');
 }
 function calAdd(){
   const ev=calPending[calIdx];if(!ev)return;
-  if(calAmt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:calAmt,date:ev.start});
+  const amt=wheelValue('calWheel')||0;
+  if(amt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:amt,date:ev.start});
   S.calProcessed.push(ev.uid);calIdx++;save();render();renderSwipeCard();
-  if(calAmt>0)toast('📅',`${eur(calAmt)} € ajoutés à tes dépenses prévues.`);
+  if(amt>0)toast('📅',`${eur(amt)} € ajoutés à tes dépenses prévues.`);
 }
 function calSkip(){
   const ev=calPending[calIdx];if(!ev)return;
