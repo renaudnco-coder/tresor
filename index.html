@@ -97,7 +97,7 @@
   .cal-chips{display:flex;gap:8px;margin-top:8px}
   .cal-chips button{flex:1;background:var(--card);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:9px 0;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;cursor:pointer}
   /* MOLETTE à graduations */
-  .wheel-val{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:600;margin-bottom:6px;color:var(--green)}
+  .wheel-val{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:600;margin-bottom:6px;color:var(--muted);transition:color .15s}
   .wheel-val small{font-size:18px;color:var(--muted);font-weight:500}
   .wheel{position:relative;height:62px;overflow-x:scroll;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:14px;background:var(--card-2);border:1px solid var(--line);touch-action:pan-x}
   .wheel::-webkit-scrollbar{display:none}
@@ -111,6 +111,7 @@
   .tick.major span{position:absolute;top:0;font-size:10px;color:var(--muted);white-space:nowrap}
   .wheel-spacer{flex:0 0 auto}
   .wheel-needle{position:absolute;top:7px;bottom:7px;left:50%;width:3px;margin-left:-1.5px;background:var(--green);border-radius:2px;z-index:3;pointer-events:none;box-shadow:0 0 10px var(--green)}
+  .combat-chip{position:absolute;top:16px;right:16px;z-index:2;background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.3);color:var(--green);border-radius:50px;padding:7px 13px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;cursor:pointer}
 
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
   .alert.good{background:var(--green-d);border-color:rgba(52,211,153,.3)}
@@ -279,6 +280,7 @@
   <!-- ACCUEIL -->
   <div class="view on" id="v-accueil">
     <div class="balance">
+      <button class="combat-chip" onclick="go('profil')" title="Mes combats">🎯 <span id="combatChipN">0/0</span></button>
       <div class="lab">Solde actuel</div>
       <div class="amt num" id="soldeBig">0<small> €</small></div>
       <div class="sub" id="soldeSub">—</div>
@@ -298,7 +300,6 @@
       </div>
     </div>
 
-    <div class="lifecard" id="combatCard"></div>
     <div class="rewardcard" id="rewardCard"></div>
 
     <div class="alert" id="proj"><div class="ic">📊</div><div><div class="t" id="projT">—</div><div class="d" id="projD">—</div></div></div>
@@ -306,12 +307,7 @@
     <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
     <div id="plannedList"></div>
 
-    <div class="simu">
-      <div class="h">💭 Avant d'acheter…</div>
-      <div class="sub">Tu hésites ? Tape le montant, je te dis si tu peux.</div>
-      <input id="simAmt" type="number" inputmode="decimal" placeholder="Montant €" oninput="simulate()">
-      <div class="verdict" id="simV"></div>
-    </div>
+    <div class="alert" id="hygiene"><div class="ic">🫀</div><div style="flex:1"><div class="t" id="hygT">—</div><div class="d" id="hygD">—</div><div class="bar" id="hygBar" style="margin-top:10px"><i style="width:0"></i></div></div></div>
 
     <div class="sec-t">Derniers mouvements</div>
     <div id="txList"></div>
@@ -348,6 +344,7 @@
       <div class="stat"><div class="v num" id="stStreak">0</div><div class="k">Jours de série</div></div>
       <div class="stat"><div class="v num" id="stLvl">1</div><div class="k">Niveau</div></div>
     </div>
+    <div class="lifecard" id="combatCard"></div>
     <div class="sec-t">Mes badges</div>
     <div class="badges" id="badgeGrid"></div>
     <div class="sec-t">Réglages</div>
@@ -448,20 +445,22 @@ function initWheel(id){
   const track=w.querySelector('.wheel-track');const tickW=14;
   const n=Math.round((cfg.max-cfg.min)/cfg.step);
   let html=`<div class="wheel-spacer" id="${id}-sl"></div>`;
-  for(let i=0;i<=n;i++){const v=round2(cfg.min+i*cfg.step);const major=i%cfg.majorEvery===0;html+=`<div class="tick ${major?'major':''}"><i></i>${major?`<span>${cfg.majorLabel?cfg.majorLabel(v):v}</span>`:''}</div>`;}
+  for(let i=0;i<=n;i++){const v=round2(cfg.max-i*cfg.step);const major=i%cfg.majorEvery===0;html+=`<div class="tick ${major?'major':''}"><i></i>${major?`<span>${cfg.majorLabel?cfg.majorLabel(v):v}</span>`:''}</div>`;}
   html+=`<div class="wheel-spacer" id="${id}-sr"></div>`;
   track.innerHTML=html;w._val=cfg.value;
   requestAnimationFrame(()=>{
     const ww=w.clientWidth,pad=Math.max(0,ww/2-tickW/2);
     const sl=document.getElementById(id+'-sl'),sr=document.getElementById(id+'-sr');
     if(sl)sl.style.width=pad+'px';if(sr)sr.style.width=pad+'px';
-    w.scrollLeft=Math.round((cfg.value-cfg.min)/cfg.step)*tickW;paintWheel(id);
-    w.addEventListener('scroll',()=>{const i=Math.round(w.scrollLeft/tickW);w._val=round2(Math.min(cfg.max,Math.max(cfg.min,cfg.min+i*cfg.step)));paintWheel(id)});
+    w.scrollLeft=Math.round((cfg.max-cfg.value)/cfg.step)*tickW;paintWheel(id);
+    w.addEventListener('scroll',()=>{const i=Math.round(w.scrollLeft/tickW);w._val=round2(Math.min(cfg.max,Math.max(cfg.min,cfg.max-i*cfg.step)));paintWheel(id)});
   });
 }
-function paintWheel(id){const cfg=WHEELS[id],w=document.getElementById(id);if(!cfg||!w)return;const lbl=document.getElementById(id+'-val');if(lbl)lbl.innerHTML=cfg.fmt(w._val);if(cfg.onChange)cfg.onChange(w._val)}
+function paintWheel(id){const cfg=WHEELS[id],w=document.getElementById(id);if(!cfg||!w)return;const lbl=document.getElementById(id+'-val');if(lbl){lbl.innerHTML=cfg.fmt(w._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=w._val<0?'var(--red)':(w._val>0?'var(--green)':'var(--muted)');}
+  if(w._lastV!==w._val){if(navigator.vibrate)navigator.vibrate(7);w._lastV=w._val;}
+  if(cfg.onChange)cfg.onChange(w._val)}
 function wheelValue(id){const w=document.getElementById(id);return w&&w._val!==undefined?w._val:(WHEELS[id]?WHEELS[id].value:0)}
-function setWheel(id,v){const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);w.scrollTo({left:Math.round((v-cfg.min)/cfg.step)*14,behavior:'smooth'});w._val=v;paintWheel(id)}
+function setWheel(id,v){const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);w.scrollTo({left:Math.round((cfg.max-v)/cfg.step)*14,behavior:'smooth'});w._val=v;paintWheel(id)}
 
 function finishOnboarding(){
   S=fresh();
@@ -800,13 +799,33 @@ function projection(){
 }
 
 // ===== SIMULATEUR =====
-function simulate(){
-  const a=+$('simAmt').value,v=$('simV');if(!a||a<=0){v.className='verdict';return}
-  const m=monthOf(todayStr()),spent=S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).reduce((x,t)=>x+t.amount,0),reste=S.budgetVar-spent-a;
-  v.className='verdict show';
-  if(a>S.solde)v.innerHTML=`<span style="color:var(--red)">🔴 <b>${eur(a)} €</b> ? Tu n'as que ${eur(S.solde)} € dispo. À éviter.</span>`;
-  else if(reste<0)v.innerHTML=`<span style="color:var(--amber)">🟠 Possible, mais tu dépasses ton budget du mois de <b>${eur(Math.abs(reste))} €</b>.</span>`;
-  else v.innerHTML=`<span style="color:var(--green)">🟢 Vas-y, tu peux. Il te restera <b>${eur(reste)} €</b> de budget ce mois-ci.</span>`;
+// ===== INDICATEUR D'HYGIÈNE FINANCIÈRE =====
+function hygiene(){
+  let score=50;
+  const net=S.revFixe-S.chargeFixe-S.budgetVar;
+  score+=net>=0?20:-20;
+  const today=todayStr();
+  const planned=(S.planned||[]).reduce((a,p)=>a+p.amount,0); // toutes les dépenses prévues comptent
+  const after=S.solde-planned;
+  if(after<0)score-=30;else if(after<150)score-=10;else score+=15;
+  const m=monthOf(today),out=S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).reduce((a,t)=>a+t.amount,0);
+  if(S.budgetVar>0){if(out<=S.budgetVar)score+=15;else score-=15;}
+  score=Math.max(0,Math.min(100,Math.round(score)));
+  let label,cls,msg;
+  if(score>=75){label='Excellente';cls='good';msg='Tu gères très bien — continue comme ça 💚';}
+  else if(score>=50){label='Correcte';cls='warn';msg='Ça tient, mais reste vigilant.';}
+  else if(score>=30){label='Fragile';cls='warn';msg='Attention, ta marge se réduit.';}
+  else{label='Critique';cls='bad';msg='Danger : tu t\'apprêtes à vivre au-dessus de tes moyens.';}
+  return {score,label,cls,msg,planned,after};
+}
+function renderHygiene(){
+  const h=hygiene();const el=$('hygiene');if(!el)return;
+  el.className='alert '+h.cls;
+  el.querySelector('.ic').textContent=h.cls==='good'?'💚':h.cls==='bad'?'🔴':'🟡';
+  $('hygT').textContent=`Hygiène financière : ${h.label} (${h.score}/100)`;
+  $('hygD').innerHTML=h.planned>0?`${h.msg}<br><span style="font-size:12px">Après tes <b>${eur(h.planned)} €</b> prévus, il te resterait <b style="color:${h.after<0?'var(--red)':'var(--text)'}">${eur(h.after)} €</b>.</span>`:h.msg;
+  const bar=$('hygBar');bar.className='bar'+(h.score<30?' hot':h.score<60?' mid':'');
+  bar.querySelector('i').style.width=h.score+'%';
 }
 
 // ===== RÉGLAGES =====
@@ -904,7 +923,8 @@ function render(){
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 
-  renderCombats();renderReward();renderPlanned();
+  renderCombats();renderReward();renderPlanned();renderHygiene();
+  const chip=$('combatChipN');if(chip){const done=(S.combats||[]).filter(id=>actionDoneToday(id)).length;chip.textContent=done+'/'+((S.combats||[]).length||0)}
 }
 function renderCombats(){
   const card=$('combatCard');
@@ -1044,7 +1064,7 @@ async function checkCalendar(){
   try{
     const r=await fetch('/api/calendar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ics:S.icsUrl})});
     const j=await r.json();if(!r.ok||!j.events)return;
-    calPending=j.events.filter(e=>!S.calProcessed.includes(e.uid));
+    calPending=j.events.filter(e=>!S.calProcessed.includes(e.key));
     updateBell();
     if(calPending.length)toast('🔔',`${calPending.length} engagement(s) à estimer.`);
   }catch(e){}
@@ -1063,8 +1083,8 @@ function renderSwipeCard(){
     <h2>📅 Combien ça va coûter ?</h2>
     <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
     <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
-    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:0,max:200,step:5,value:10,majorEvery:10,fmt:v=>eur(v)+' <small>€</small>',majorLabel:v=>v,onChange:()=>{}})}</div>
-    <div class="cal-chips" style="margin-top:10px">${[0,10,20,50,100].map(v=>`<button onclick="setWheel('calWheel',${v})">${v} €</button>`).join('')}</div>
+    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:-300,max:0,step:5,value:-10,majorEvery:10,fmt:v=>v<0?('−'+eur(-v)+' <small>€</small>'):'<small>Gratuit</small>',majorLabel:v=>v===0?'0':(-v),onChange:()=>{}})}</div>
+    <div class="cal-chips" style="margin-top:10px">${[[-10,'10 €'],[-20,'20 €'],[-50,'50 €'],[-100,'100 €'],[0,'Gratuit']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
     <div style="display:flex;gap:12px;margin-top:18px">
       <button class="btn btn-ghost" style="flex:1" onclick="calSkip()">✕ Gratuit</button>
       <button class="btn btn-pri" style="flex:1" onclick="calAdd()">✓ Prévoir</button>
@@ -1073,14 +1093,14 @@ function renderSwipeCard(){
 }
 function calAdd(){
   const ev=calPending[calIdx];if(!ev)return;
-  const amt=wheelValue('calWheel')||0;
+  const amt=Math.max(0,-(wheelValue('calWheel')||0));
   if(amt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:amt,date:ev.start});
-  S.calProcessed.push(ev.uid);calIdx++;save();render();renderSwipeCard();
+  S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
   if(amt>0)toast('📅',`${eur(amt)} € ajoutés à tes dépenses prévues.`);
 }
 function calSkip(){
   const ev=calPending[calIdx];if(!ev)return;
-  S.calProcessed.push(ev.uid);calIdx++;save();render();renderSwipeCard();
+  S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
 }
 
 migrate();

@@ -41,7 +41,7 @@ function parseICS(text) {
   const max = new Date(today.getTime() + 45 * 864e5);
   return events
     .filter(e => e.start)
-    .map(e => ({ uid: e.uid || (e.summary || '') + e.start, summary: e.summary || 'Événement', start: e.start }))
+    .map(e => ({ key: (e.uid || (e.summary || '')) + '|' + e.start, summary: e.summary || 'Événement', start: e.start }))
     .filter(e => { const d = new Date(e.start); return d >= today && d <= max; })
     .sort((a, b) => a.start < b.start ? -1 : 1)
     .slice(0, 40);
