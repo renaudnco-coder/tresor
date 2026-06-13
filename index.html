@@ -10,6 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" href="icon.svg">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <title>Trésor — Reprends le contrôle</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -406,7 +407,7 @@ let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
 function save(){localStorage.setItem(KEY,JSON.stringify(S))}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -427,6 +428,7 @@ function migrate(){
   if(!S.piggyLog)S.piggyLog=[];
   if(S.icsUrl===undefined)S.icsUrl='';
   if(!S.calProcessed)S.calProcessed=[];
+  if(S.gClientId===undefined)S.gClientId='';
 }
 
 const $=id=>document.getElementById(id);
@@ -846,12 +848,18 @@ function openSettings(){
       <input id="se-pal" type="number" min="1" value="${S.palier}" oninput="palSync()">
       <div class="hint">Le montant à atteindre avant de pouvoir verser dans un silo. « Autre » = 60 € ou plus.</div>
     </div>
-    <div class="field"><label>📅 Mon agenda (lien iCal secret)</label><input id="se-ics" type="url" placeholder="https://calendar.google.com/.../basic.ics" value="${(S.icsUrl||'').replace(/"/g,'&quot;')}"><div class="hint">Google Agenda → Paramètres du calendrier → « Adresse secrète au format iCal ». Colle-la ici pour que l'app estime tes engagements à venir.</div></div>
+    <div class="sec-t" style="margin:18px 0 8px">Agenda — option A : Google</div>
+    <div class="field"><label>ID client OAuth Google</label><input id="se-gid" type="text" placeholder="xxxx.apps.googleusercontent.com" value="${(S.gClientId||'').replace(/"/g,'&quot;')}"><div class="hint">À créer une fois dans Google Cloud (je te guide). Plus propre qu'un lien.</div></div>
+    <button class="btn btn-ghost" onclick="saveSettings(true)" style="margin-bottom:14px">🔗 Connecter mon agenda Google</button>
+    <div class="sec-t" style="margin:6px 0 8px">Agenda — option B : lien iCal (sans config)</div>
+    <div class="field"><label>Mon agenda (lien iCal secret)</label><input id="se-ics" type="url" placeholder="https://calendar.google.com/.../basic.ics" value="${(S.icsUrl||'').replace(/"/g,'&quot;')}"><div class="hint">Google Agenda (sur ordi) → Paramètres → « Adresse secrète au format iCal ».</div></div>
     <button class="btn btn-pri" onclick="saveSettings()">Enregistrer</button>`;
   palSync();
   openSheet();
 }
-function saveSettings(){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);const ics=$('se-ics');if(ics)S.icsUrl=ics.value.trim();save();closeSheet();render();toast('⚙️','Réglages mis à jour.');if(S.icsUrl)checkCalendar()}
+function saveSettings(connectGoogle){S.solde=+$('se-solde').value||0;S.revFixe=+$('se-rev').value||0;S.chargeFixe=+$('se-charge').value||0;S.budgetVar=+$('se-budget').value||0;S.palier=Math.max(1,+$('se-pal').value||20);const ics=$('se-ics');if(ics)S.icsUrl=ics.value.trim();const gid=$('se-gid');if(gid)S.gClientId=gid.value.trim();save();
+  if(connectGoogle===true){if(!S.gClientId){toast('📅','Colle ton ID client Google d\'abord.');return}closeSheet();gConnect('consent');return}
+  closeSheet();render();toast('⚙️','Réglages mis à jour.');if(S.icsUrl)checkCalendar()}
 function palPick(v){const inp=$('se-pal');if(v>0){inp.value=v}else{if(+inp.value<60)inp.value=60;inp.focus()}palSync()}
 function palSync(){const v=+$('se-pal').value;[['pal20',20],['pal40',40],['pal60',60]].forEach(([id,n])=>{const b=$(id);if(b)b.className=v===n?'on in':''});const x=$('palX');if(x)x.className=(v!==20&&v!==40&&v!==60)?'on in':''}
 function exportData(){const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='tresor-sauvegarde.json';a.click();toast('💾','Sauvegarde téléchargée.')}
@@ -1058,7 +1066,33 @@ mf.addEventListener('pointercancel',holdEnd);
 mf.addEventListener('contextmenu',e=>e.preventDefault());
 
 // ===== AGENDA → DÉPENSES PROBABLES (cloche + cartes + roulette) =====
-let calPending=[],calIdx=0,calAmt=10;
+let calPending=[],calIdx=0,calAmt=10,gTokenClient=null;
+function gReady(){return window.google&&google.accounts&&google.accounts.oauth2}
+function gSetup(){
+  if(!S.gClientId)return false;
+  if(!gReady()){toast('📅','Librairie Google pas encore prête, réessaie dans 2 s.');return false}
+  if(!gTokenClient){
+    gTokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:S.gClientId,
+      scope:'https://www.googleapis.com/auth/calendar.readonly',
+      callback:(resp)=>{if(resp&&resp.access_token)fetchGoogleEvents(resp.access_token);else toast('📅','Connexion Google annulée.')}
+    });
+  }
+  return true;
+}
+function gConnect(prompt){if(!gSetup())return;try{gTokenClient.requestAccessToken({prompt:prompt||''})}catch(e){toast('📅','Erreur connexion Google.')}}
+async function fetchGoogleEvents(token){
+  try{
+    const now=new Date(),max=new Date(now.getTime()+45*864e5);
+    const url='https://www.googleapis.com/calendar/v3/calendars/primary/events?'+new URLSearchParams({timeMin:now.toISOString(),timeMax:max.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
+    const r=await fetch(url,{headers:{Authorization:'Bearer '+token}});
+    const j=await r.json();
+    if(!j.items){toast('📅','Aucun événement lu.');return}
+    const evs=j.items.filter(e=>e.start).map(e=>{const s=(e.start.date||e.start.dateTime||'').slice(0,10);return{key:(e.id||e.summary||'')+'|'+s,summary:e.summary||'Événement',start:s}}).filter(e=>e.start);
+    calPending=evs.filter(e=>!S.calProcessed.includes(e.key));updateBell();
+    toast('🔔',calPending.length?`${calPending.length} engagement(s) à estimer.`:'Agenda Google à jour ✅');
+  }catch(e){toast('📅','Erreur lecture agenda Google.')}
+}
 async function checkCalendar(){
   if(!S.icsUrl)return;
   try{
@@ -1071,8 +1105,8 @@ async function checkCalendar(){
 }
 function updateBell(){const d=$('bellDot');if(d)d.classList.toggle('on',calPending.length>0)}
 function onBell(){
-  if(!S.icsUrl){openSettings();setTimeout(()=>{const i=$('se-ics');if(i)i.focus()},400);toast('📅','Ajoute ton lien agenda dans les réglages.');return}
-  if(!calPending.length){checkCalendar();toast('🔔','Rien de nouveau pour l\'instant.');return}
+  if(!S.icsUrl&&!S.gClientId){openSettings();toast('📅','Connecte ton agenda dans les réglages.');return}
+  if(!calPending.length){if(S.gClientId)gConnect('');else checkCalendar();toast('🔔','Je vérifie ton agenda…');return}
   calIdx=0;renderSwipeCard();openSheet();
 }
 function renderSwipeCard(){
@@ -1104,7 +1138,7 @@ function calSkip(){
 }
 
 migrate();
-if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();if(S.icsUrl)setTimeout(checkCalendar,900)}
+if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();if(S.gClientId)setTimeout(()=>gConnect(''),1600);else if(S.icsUrl)setTimeout(checkCalendar,900)}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
 </body>
