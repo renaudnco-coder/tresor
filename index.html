@@ -102,18 +102,13 @@
   .wheel-val{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:600;margin-bottom:6px;color:var(--muted);transition:color .15s}
   .wheel-val small{font-size:18px;color:var(--muted);font-weight:500}
   .wheel-edit{font-size:15px;opacity:.5;margin-left:8px;vertical-align:middle}
-  .wheel{position:relative;height:62px;overflow-x:scroll;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-radius:14px;background:var(--card-2);border:1px solid var(--line);touch-action:pan-x}
-  .wheel::-webkit-scrollbar{display:none}
-  .wheel::before,.wheel::after{content:'';position:sticky;top:0;height:100%;width:34px;z-index:2;pointer-events:none;display:inline-block;vertical-align:top}
-  .wheel::before{left:0;background:linear-gradient(90deg,var(--card-2),transparent)}
-  .wheel::after{right:0;background:linear-gradient(270deg,var(--card-2),transparent)}
-  .wheel-track{display:flex;align-items:flex-end;height:100%;padding-bottom:9px}
-  .tick{flex:0 0 14px;display:flex;justify-content:center;align-items:flex-end;scroll-snap-align:center;position:relative}
-  .tick i{width:2px;height:11px;background:rgba(140,160,200,.3);border-radius:2px}
-  .tick.major i{height:22px;background:var(--muted)}
-  .tick.major span{position:absolute;top:0;font-size:10px;color:var(--muted);white-space:nowrap}
-  .wheel-spacer{flex:0 0 auto}
-  .wheel-needle{position:absolute;top:7px;bottom:7px;left:50%;width:3px;margin-left:-1.5px;background:var(--green);border-radius:2px;z-index:3;pointer-events:none;box-shadow:0 0 10px var(--green)}
+  .wheel-val.tappable{cursor:pointer}
+  .dial{width:230px;max-width:78%;margin:4px auto 0;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  .dial:active{cursor:grabbing}
+  .dial-svg{width:100%;height:auto;display:block;overflow:visible}
+  .dial-track{fill:none;stroke:var(--card-2);stroke-width:16}
+  .dial-arc{fill:none;stroke-width:16;stroke-linecap:round;transition:none}
+  .dial-ticks line{stroke:var(--muted);stroke-width:2.4;stroke-linecap:round;opacity:.55}
   .combat-chip{position:absolute;top:16px;right:16px;z-index:2;background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.3);color:var(--green);border-radius:50px;padding:7px 13px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;cursor:pointer}
 
   .alert{margin-top:14px;border-radius:18px;padding:16px 18px;border:1px solid var(--line);display:flex;gap:13px;align-items:flex-start}
@@ -481,7 +476,7 @@ function wheelTick(){
     o.start(t);o.stop(t+0.03);
   }catch(e){}
 }
-function wheelMarkup(id,o){WHEELS[id]=o;const tap=o.money?` onclick="editWheelAmount('${id}')" style="cursor:pointer"`:'';return `<div class="wheel-val"${tap}><span id="${id}-val"></span>${o.money?'<span class="wheel-edit">✏️</span>':''}</div><div class="wheel" id="${id}"><div class="wheel-track"></div><div class="wheel-needle"></div></div>`}
+function wheelMarkup(id,o){WHEELS[id]=o;const tap=o.money?` onclick="editWheelAmount('${id}')"`:'';return `<div class="wheel-val${o.money?' tappable':''}"${tap}><span id="${id}-val"></span>${o.money?'<span class="wheel-edit">✏️</span>':''}</div><div class="dial" id="${id}"></div>`}
 // Saisie directe d'un montant exact (sans limite) en tapant sur le grand chiffre
 function editWheelAmount(id){
   const cfg=WHEELS[id];if(!cfg)return;
@@ -490,29 +485,55 @@ function editWheelAmount(id){
   if(s===null)return;
   const v=parseFloat((s+'').replace(',','.').replace(/[^0-9.]/g,''));
   if(isNaN(v)||v<0){toast('⚠️','Montant invalide.');return}
-  setWheel(id,cfg.neg?-v:v);
+  setWheel(id,v);
 }
+// Trace un arc circulaire (0° = haut, sens horaire)
+function arcPath(cx,cy,r,a0,a1){
+  const pt=a=>{const rad=a*Math.PI/180;return [cx+r*Math.sin(rad),cy-r*Math.cos(rad)];};
+  if(a1-a0>=359.99)a1=a0+359.99;
+  const [x0,y0]=pt(a0),[x1,y1]=pt(a1),large=(a1-a0)>180?1:0;
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+// Cadran rotatif (façon EasyPark) : on tourne le bouton, valeur illimitée, clic à chaque cran
 function initWheel(id){
-  const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);if(!w)return;
-  const track=w.querySelector('.wheel-track');const tickW=14;
-  const n=Math.round((cfg.max-cfg.min)/cfg.step);
-  let html=`<div class="wheel-spacer" id="${id}-sl"></div>`;
-  for(let i=0;i<=n;i++){const v=round2(cfg.max-i*cfg.step);const major=i%cfg.majorEvery===0;html+=`<div class="tick ${major?'major':''}"><i></i>${major?`<span>${cfg.majorLabel?cfg.majorLabel(v):v}</span>`:''}</div>`;}
-  html+=`<div class="wheel-spacer" id="${id}-sr"></div>`;
-  track.innerHTML=html;w._val=cfg.value;
-  requestAnimationFrame(()=>{
-    const ww=w.clientWidth,pad=Math.max(0,ww/2-tickW/2);
-    const sl=document.getElementById(id+'-sl'),sr=document.getElementById(id+'-sr');
-    if(sl)sl.style.width=pad+'px';if(sr)sr.style.width=pad+'px';
-    w.scrollLeft=Math.round((cfg.max-cfg.value)/cfg.step)*tickW;paintWheel(id);
-    w.addEventListener('scroll',()=>{const i=Math.round(w.scrollLeft/tickW);w._val=round2(Math.min(cfg.max,Math.max(cfg.min,cfg.max-i*cfg.step)));paintWheel(id)});
-  });
+  const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;
+  if(cfg.min==null)cfg.min=0;
+  cfg.perTurn=cfg.perTurn||40*cfg.step;            // valeur couverte par un tour complet
+  cfg.degPerStep=360*cfg.step/cfg.perTurn;          // angle d'un cran
+  const R=104,ticks=40;let tk='';
+  for(let i=0;i<ticks;i++){const a=i/ticks*2*Math.PI,s=Math.sin(a),c=-Math.cos(a);tk+=`<line x1="${(120+s*(R-3)).toFixed(1)}" y1="${(120+c*(R-3)).toFixed(1)}" x2="${(120+s*(R-16)).toFixed(1)}" y2="${(120+c*(R-16)).toFixed(1)}"/>`;}
+  host.innerHTML=`<svg viewBox="0 0 240 240" class="dial-svg"><defs><linearGradient id="dg-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b14fc8"/><stop offset="1" stop-color="#ff5a98"/></linearGradient></defs><circle cx="120" cy="120" r="${R}" class="dial-track"/><path class="dial-arc" style="stroke:url(#dg-${id})" d=""/><g class="dial-ticks">${tk}</g></svg>`;
+  host._cv=(cfg.value!=null?cfg.value:cfg.min);
+  host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);
+  host._step=Math.round(host._cv/cfg.step);
+  let drag=false,lastA=0;
+  const ang=e=>{const r=host.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return Math.atan2(t.clientX-(r.left+r.width/2),-(t.clientY-(r.top+r.height/2)))*180/Math.PI;};
+  const down=e=>{drag=true;lastA=ang(e);};
+  const moveH=e=>{if(!drag)return;if(e.cancelable)e.preventDefault();let a=ang(e),d=a-lastA;if(d>180)d-=360;if(d<-180)d+=360;lastA=a;
+    host._cv+=d/cfg.degPerStep*cfg.step;
+    if(host._cv<cfg.min)host._cv=cfg.min;
+    if(cfg.max!=null&&host._cv>cfg.max)host._cv=cfg.max;
+    const st=Math.round(host._cv/cfg.step);host._val=round2(st*cfg.step);
+    if(st!==host._step){host._step=st;if(navigator.vibrate)navigator.vibrate(7);wheelTick();}
+    paintWheel(id);};
+  const up=()=>{drag=false;};
+  host.addEventListener('touchstart',down,{passive:true});
+  host.addEventListener('touchmove',moveH,{passive:false});
+  host.addEventListener('touchend',up);host.addEventListener('touchcancel',up);
+  host.addEventListener('mousedown',e=>{down(e);const mm=ev=>moveH(ev),mu=()=>{up();window.removeEventListener('mousemove',mm);window.removeEventListener('mouseup',mu);};window.addEventListener('mousemove',mm);window.addEventListener('mouseup',mu);});
+  paintWheel(id);
 }
-function paintWheel(id){const cfg=WHEELS[id],w=document.getElementById(id);if(!cfg||!w)return;const lbl=document.getElementById(id+'-val');if(lbl){lbl.innerHTML=cfg.fmt(w._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=w._val<0?'var(--red)':(w._val>0?'var(--green)':'var(--muted)');}
-  if(w._lastV!==w._val){if(navigator.vibrate)navigator.vibrate(7);wheelTick();w._lastV=w._val;}
-  if(cfg.onChange)cfg.onChange(w._val)}
+function paintWheel(id){
+  const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;
+  const arc=host.querySelector('.dial-arc'),tg=host.querySelector('.dial-ticks');
+  if(tg)tg.setAttribute('transform',`rotate(${(host._cv/cfg.step*cfg.degPerStep).toFixed(2)} 120 120)`);
+  if(arc){const within=((host._cv-cfg.min)%cfg.perTurn+cfg.perTurn)%cfg.perTurn;let frac=within/cfg.perTurn;if(host._cv>cfg.min&&frac===0)frac=1;arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360));}
+  const lbl=document.getElementById(id+'-val');
+  if(lbl){lbl.innerHTML=cfg.fmt(host._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=host._val<0?'var(--red)':(host._val>0?'var(--green)':'var(--muted)');}
+  if(cfg.onChange)cfg.onChange(host._val);
+}
 function wheelValue(id){const w=document.getElementById(id);return w&&w._val!==undefined?w._val:(WHEELS[id]?WHEELS[id].value:0)}
-function setWheel(id,v){const cfg=WHEELS[id];if(!cfg)return;const w=document.getElementById(id);w._val=v;if(v<=cfg.max&&v>=cfg.min)w.scrollTo({left:Math.round((cfg.max-v)/cfg.step)*14,behavior:'smooth'});paintWheel(id)}
+function setWheel(id,v){const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;host._cv=Math.max(cfg.min,cfg.max!=null?Math.min(cfg.max,v):v);host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);host._step=Math.round(host._cv/cfg.step);wheelTick();paintWheel(id);}
 
 function finishOnboarding(){
   S=fresh();
@@ -783,7 +804,7 @@ function renderCombatDone(){
   $('sheetBody').innerHTML=`
     <h2>${c.e} ${c.n} — fait !</h2>
     <div class="lead">Fais glisser la molette : tu gagnes des points à ta juste mesure.</div>
-    <div class="field"><label>Temps passé</label>${wheelMarkup('hrWheel',{min:0,max:5,step:0.25,value:combatPick.hours,majorEvery:4,fmt:fmtH,majorLabel:v=>v+'h',onChange:v=>{combatPick.hours=v;renderPtsLive()}})}</div>
+    <div class="field"><label>Temps passé</label>${wheelMarkup('hrWheel',{min:0,step:0.25,perTurn:6,value:combatPick.hours,fmt:fmtH,onChange:v=>{combatPick.hours=v;renderPtsLive()}})}</div>
     <div class="field"><label>Satisfaction de toi</label>
       <div class="faces">${faces.map((f,i)=>`<button type="button" class="face ${combatPick.satis===i+1?'on':''}" onclick="combatPick.hours=wheelValue('hrWheel');combatPick.satis=${i+1};renderCombatDone()">${f}</button>`).join('')}</div></div>
     <div class="pts-preview">+<span id="ptsLive">${combatPoints()}</span> <small>pts</small></div>
@@ -1172,8 +1193,8 @@ function renderSwipeCard(){
     <h2>📅 Combien ça va coûter ?</h2>
     <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
     <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
-    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:-2000,max:0,step:5,value:-10,majorEvery:10,money:true,neg:true,fmt:v=>v<0?('−'+eur(-v)+' <small>€</small>'):'<small>Gratuit</small>',majorLabel:v=>v===0?'0':(-v),onChange:()=>{}})}</div>
-    <div class="cal-chips" style="margin-top:10px">${[[-10,'10 €'],[-50,'50 €'],[-100,'100 €'],[-500,'500 €'],[0,'Gratuit']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
+    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:0,step:5,value:10,perTurn:200,money:true,fmt:v=>v>0?(eur(v)+' <small>€</small>'):'<small>Gratuit</small>',onChange:()=>{}})}</div>
+    <div class="cal-chips" style="margin-top:10px">${[[0,'Gratuit'],[10,'10 €'],[50,'50 €'],[100,'100 €'],[500,'500 €']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
     <div style="display:flex;gap:12px;margin-top:18px">
       <button class="btn btn-ghost" style="flex:1" onclick="calSkip()">✕ Gratuit</button>
       <button class="btn btn-pri" style="flex:1" onclick="calAdd()">✓ Prévoir</button>
@@ -1183,7 +1204,7 @@ function renderSwipeCard(){
 }
 function calAdd(){
   const ev=calPending[calIdx];if(!ev)return;
-  const amt=Math.max(0,-(wheelValue('calWheel')||0));
+  const amt=Math.max(0,wheelValue('calWheel')||0);
   if(amt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:amt,date:ev.start});
   S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
   if(amt>0)toast('📅',`${eur(amt)} € ajoutés à tes dépenses prévues.`);
