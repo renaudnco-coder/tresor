@@ -11,6 +11,7 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <link rel="icon" href="icon.svg">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <title>Trésor — Reprends le contrôle</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -255,8 +256,19 @@
 </head>
 <body>
 
+<!-- CONNEXION / COMPTE -->
+<div class="onb auth" id="auth">
+  <div class="logo">Tré<span>sor</span></div>
+  <div class="tag">Connecte-toi pour retrouver ton trésor partout.</div>
+  <div class="field"><label>Email</label><input id="au-email" type="email" inputmode="email" autocomplete="email" placeholder="toi@email.com"></div>
+  <div class="field"><label>Mot de passe</label><input id="au-pass" type="password" autocomplete="current-password" placeholder="6 caractères minimum"></div>
+  <button class="btn btn-pri" id="au-btn" onclick="authSubmit()" style="margin-top:6px">Se connecter</button>
+  <div id="au-msg" class="hint" style="text-align:center;margin-top:12px;min-height:18px"></div>
+  <button class="lnk-edit" id="au-toggle" onclick="authToggle()" style="margin:14px auto 0;display:block">Pas encore de compte ? Créer un compte</button>
+</div>
+
 <!-- ONBOARDING -->
-<div class="onb" id="onb">
+<div class="onb hide" id="onb">
   <div class="logo">Tré<span>sor</span></div>
   <div class="tag">Reprends le contrôle, un palier à la fois.</div>
   <div class="field"><label>Combien as-tu sur ton compte là, maintenant ? (€)</label><input id="ob-solde" type="number" inputmode="decimal" placeholder="ex : 850"></div>
@@ -352,6 +364,7 @@
     <button class="btn btn-ghost" onclick="openSettings()" style="margin-bottom:10px">⚙️ Modifier mes montants fixes</button>
     <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
     <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Sauvegarde complète (JSON)</button>
+    <button class="btn btn-ghost" onclick="authLogout()" style="margin-bottom:10px">🚪 Se déconnecter</button>
     <button class="btn btn-red" onclick="resetAll()">🗑️ Tout réinitialiser</button>
     <div class="hint" style="text-align:center;margin-top:16px">Tes données restent privées, uniquement sur cet appareil.</div>
   </div>
@@ -383,6 +396,11 @@
 
 <script>
 const KEY='tresor_state_v1';
+// ===== SUPABASE (comptes + synchro cloud) =====
+const SB_URL='https://dgkluuaaturliqwanwrm.supabase.co';
+const SB_KEY='sb_publishable_7UrFze0sYdvTexEVz9NNIA_ge7QBYKy';
+let sb=null;try{if(window.supabase)sb=window.supabase.createClient(SB_URL,SB_KEY)}catch(e){}
+let currentUser=null,authMode='login',cloudTimer=null;
 const CATS=[
   {id:'courses',e:'🛒',n:'Courses'},{id:'resto',e:'🍽️',n:'Resto'},
   {id:'transport',e:'🚇',n:'Transport'},{id:'loisirs',e:'🎬',n:'Loisirs'},
@@ -406,7 +424,10 @@ const COMBATS=[
 let S=load();
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}}
-function save(){localStorage.setItem(KEY,JSON.stringify(S))}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));scheduleCloudSync()}
+function scheduleCloudSync(){if(!sb||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,1200)}
+async function saveCloud(){if(!sb||!currentUser)return;try{await sb.from('tresor_states').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()})}catch(e){}}
+async function loadCloud(){if(!sb||!currentUser)return null;try{const{data,error}=await sb.from('tresor_states').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)return null;return data?data.data:null}catch(e){return null}}
 function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
@@ -1137,8 +1158,44 @@ function calSkip(){
   S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
 }
 
+// ===== AUTH =====
+function authMsg(t,err){const e=$('au-msg');if(e){e.textContent=t;e.style.color=err?'var(--red)':'var(--muted)'}}
+function authToggle(){authMode=authMode==='login'?'signup':'login';$('au-btn').textContent=authMode==='login'?'Se connecter':'Créer mon compte';$('au-toggle').textContent=authMode==='login'?'Pas encore de compte ? Créer un compte':'Déjà un compte ? Se connecter';authMsg('')}
+function traduireAuth(m){m=(m||'').toLowerCase();if(m.includes('invalid login'))return 'Email ou mot de passe incorrect.';if(m.includes('already registered')||m.includes('already been registered'))return 'Cet email a déjà un compte.';if(m.includes('password'))return 'Mot de passe trop court (6 min).';return 'Oups : '+m}
+async function authSubmit(){
+  if(!sb){authMsg('Serveur indisponible, réessaie.',true);return}
+  const email=($('au-email').value||'').trim(),pass=$('au-pass').value||'';
+  if(!email||pass.length<6){authMsg('Email + mot de passe (6 caractères min).',true);return}
+  $('au-btn').disabled=true;authMsg('…');
+  try{
+    const res=authMode==='signup'?await sb.auth.signUp({email,password:pass}):await sb.auth.signInWithPassword({email,password:pass});
+    if(res.error){authMsg(traduireAuth(res.error.message),true);$('au-btn').disabled=false;return}
+    if(authMode==='signup'&&!res.data.session){authMsg('Compte créé ! Connecte-toi maintenant.',false);authToggle();authMode='login';$('au-btn').textContent='Se connecter';$('au-btn').disabled=false;return}
+  }catch(e){authMsg('Erreur réseau, réessaie.',true);$('au-btn').disabled=false}
+}
+async function authLogout(){if(sb){try{await sb.auth.signOut()}catch(e){}}location.reload()}
+async function afterLogin(session){
+  currentUser=session.user;$('auth').classList.add('hide');
+  const cloud=await loadCloud();
+  if(cloud){S=cloud;migrate();localStorage.setItem(KEY,JSON.stringify(S))}
+  else if(S&&S.onboarded&&confirm('Importer les données présentes sur cet appareil dans ton compte ?')){migrate();saveCloud()}
+  else{S=fresh();saveCloud()}
+  if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();startCalendar()}
+}
+function startCalendar(){if(S.gClientId)setTimeout(()=>gConnect(''),1600);else if(S.icsUrl)setTimeout(checkCalendar,900)}
+
 migrate();
-if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();if(S.gClientId)setTimeout(()=>gConnect(''),1600);else if(S.icsUrl)setTimeout(checkCalendar,900)}
+(function boot(){
+  if(!sb){ // pas de cloud → mode local de secours
+    $('auth').classList.add('hide');
+    if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();startCalendar()}
+    return;
+  }
+  sb.auth.onAuthStateChange((ev,session)=>{
+    if(session&&session.user){if(currentUser&&currentUser.id===session.user.id)return;afterLogin(session)}
+    else{currentUser=null;$('onb').classList.add('hide');$('auth').classList.remove('hide')}
+  });
+})();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 </script>
 </body>
