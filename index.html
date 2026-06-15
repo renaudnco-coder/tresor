@@ -226,7 +226,9 @@
   .nav button{background:none;border:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:color .25s;padding:4px 8px}
   .nav button.on{color:var(--text)}
   .nav button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  .nav .add{background:var(--green);color:#062018;width:54px;height:54px;border-radius:50%;margin-top:-26px;box-shadow:0 8px 24px -6px rgba(52,211,153,.6);justify-content:center;padding:0}
+  .nav .add{position:relative;background:var(--green);color:#062018;width:54px;height:54px;border-radius:50%;margin-top:-26px;box-shadow:0 8px 24px -6px rgba(52,211,153,.6);justify-content:center;padding:0}
+  .navdot{position:absolute;top:9px;right:11px;width:11px;height:11px;border-radius:50%;background:var(--red);border:2px solid var(--green);display:none}
+  .navdot.on{display:block}
   .nav .add svg{width:26px;height:26px;stroke-width:2.5}
 
   .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:50;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -319,7 +321,7 @@
   <div class="top">
     <div><div class="hi" id="greet">Salut 👋</div><h1 id="dateLbl">Ton trésor</h1></div>
     <div style="display:flex;align-items:center;gap:10px">
-    <button class="bell" id="bell" onclick="onBell()" title="Engagements à estimer"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="bdot" id="bellDot"></span></button>
+    <button class="bell" id="camTop" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
     <div class="lvl" onclick="go('profil')">
       <div class="ring" id="lvlRing"><i id="lvlNum">1</i></div>
       <div class="lbl"><b id="lvlName">Apprenti</b><span id="lvlPts">0 pts</span></div>
@@ -330,7 +332,7 @@
   <!-- ACCUEIL -->
   <div class="view on" id="v-accueil">
     <div class="balance">
-      <button class="combat-chip" onclick="go('profil')" title="Mes combats">🎯 <span id="combatChipN">0/0</span></button>
+      <button class="combat-chip" id="combatChip" onclick="go('profil')" title="Mes combats" style="display:none">🎯 <span id="combatChipN">0/0</span></button>
       <div class="lab">Solde actuel</div>
       <div class="bal-row">
         <div class="amt num" id="soldeBig">0<small> €</small></div>
@@ -406,7 +408,7 @@
 <div class="nav">
   <button class="on" id="nav-accueil" onclick="go('accueil')"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Accueil</button>
   <button id="nav-analyse" onclick="go('analyse')"><svg viewBox="0 0 24 24"><path d="M5 21V9M12 21V4M19 21v-7"/></svg>Analyse</button>
-  <button class="add" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button class="add" onclick="onBell()" title="Agenda à estimer"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="navdot" id="bellDot"></span></button>
   <button id="nav-dettes" onclick="go('dettes')"><svg viewBox="0 0 24 24"><path d="M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>Silos</button>
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
 </div>
@@ -454,7 +456,7 @@ function save(){localStorage.setItem(KEY,JSON.stringify(S));scheduleCloudSync()}
 function scheduleCloudSync(){if(!sb||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,1200)}
 async function saveCloud(){if(!sb||!currentUser)return;try{await sb.from('tresor_states').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()})}catch(e){}}
 async function loadCloud(){if(!sb||!currentUser)return null;try{const{data,error}=await sb.from('tresor_states').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)return null;return data?data.data:null}catch(e){return null}}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,showReward:false,game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,showReward:false,showCombats:false,game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -478,6 +480,7 @@ function migrate(){
   if(S.gClientId===undefined)S.gClientId='';
   if(S.soundOn===undefined)S.soundOn=true;
   if(S.showReward===undefined)S.showReward=false;
+  if(S.showCombats===undefined)S.showCombats=false;
 }
 
 const $=id=>document.getElementById(id);
@@ -639,9 +642,9 @@ function openResist(){
 function saveResist(){
   const amt=+$('rAmt').value;if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
   S.tirelire+=amt;S.piggyLog.unshift({id:Date.now(),date:todayStr(),amount:amt,note:$('rNote').value.trim(),type:'resist'});
-  award(Math.max(3,Math.round(amt)));meriteAdd(Math.max(2,Math.round(amt/2)));bumpStreak();
+  const pts=Math.max(3,Math.round(amt));award(pts);meriteAdd(Math.max(2,Math.round(amt/2)));bumpStreak();
   if(!hasBadge('resist'))giveBadge('resist');save();closeSheet();render();
-  toast('🐷',`+${eur2(amt)} € dans la tirelire ! Beau réflexe.`);
+  toast('🐷',`+${eur2(amt)} € dans la tirelire · +${pts} pts ! 🪙`);
   if(S.tirelire>=S.palier)setTimeout(()=>toast('🪙',`Un palier de ${S.palier} € est prêt à verser !`),1400);
 }
 function openPour(){
@@ -1064,6 +1067,8 @@ function openParams(){
       <button class="switch ${son?'on':''}" id="swSound" onclick="toggleSound()"><span></span></button></div>
     <div class="param-row"><div><div class="param-k">Carte « récompense »</div><div class="param-v">Afficher le projet plaisir / craquage mérité sur l'accueil</div></div>
       <button class="switch ${S.showReward?'on':''}" id="swReward" onclick="toggleReward()"><span></span></button></div>
+    <div class="param-row"><div><div class="param-k">Combats du mois</div><div class="param-v">Afficher les objectifs perso (musique, sport…) dans le profil</div></div>
+      <button class="switch ${S.showCombats?'on':''}" id="swCombats" onclick="toggleCombats()"><span></span></button></div>
 
     <div class="sec-t" style="margin-top:22px">💾 Mes données</div>
     <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
@@ -1086,6 +1091,12 @@ function toggleReward(){
   const b=$('swReward');if(b)b.classList.toggle('on',S.showReward);
   render();
   toast(S.showReward?'🎁':'🙈',S.showReward?'Récompense affichée sur l\'accueil.':'Récompense masquée.');
+}
+function toggleCombats(){
+  S.showCombats=!S.showCombats;save();
+  const b=$('swCombats');if(b)b.classList.toggle('on',S.showCombats);
+  render();
+  toast(S.showCombats?'🎯':'🙈',S.showCombats?'Combats affichés dans le profil.':'Combats masqués.');
 }
 async function deleteAccount(){
   if(!confirm('Supprimer ton compte et toutes tes données du cloud ? Cette action est définitive.'))return;
@@ -1174,10 +1185,13 @@ function render(){
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 
   renderCombats();renderReward();renderPlanned();renderAdvice();
+  const chipBtn=$('combatChip');if(chipBtn)chipBtn.style.display=S.showCombats?'':'none';
   const chip=$('combatChipN');if(chip){const done=(S.combats||[]).filter(id=>actionDoneToday(id)).length;chip.textContent=done+'/'+((S.combats||[]).length||0)}
 }
 function renderCombats(){
   const card=$('combatCard');
+  if(!S.showCombats){card.style.display='none';return}
+  card.style.display='';
   if(!S.combats.length){card.innerHTML=`<div class="cardh"><div class="ct">🎯 Mes combats</div></div><div class="hint" style="margin-bottom:12px">Choisis 1 ou 2 domaines (musique, sport, lecture, étude…) pour gagner des points en bossant sur toi.</div><button class="btn btn-ghost" onclick="openCombats()">Choisir mes combats</button>`;return}
   const rows=S.combats.map(id=>{const c=COMBATS.find(x=>x.id===id)||{e:'✨',n:id};const done=actionDoneToday(id);return `<div class="combat-row"><div class="cl">${c.e} ${c.n}</div><button class="cdo ${done?'done':''}" onclick="${done?`undoAction('${id}')`:`logAction('${id}')`}">${done?'✓ Fait · défaire':'Marquer fait'}</button></div>`}).join('');
   card.innerHTML=`<div class="cardh"><div class="ct">🎯 Combats du mois</div><div class="cstreak">🔥 ${S.life.streak} j</div></div>${rows}<button class="lnk-edit" onclick="openCombats()">Modifier mes combats</button>`;
