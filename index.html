@@ -492,12 +492,13 @@ function editWheelAmount(id){
   if(isNaN(v)||v<0){toast('⚠️','Montant invalide.');return}
   setWheel(id,v);
 }
-// Trace un arc circulaire (0° = haut, sens horaire)
+// Trace un arc circulaire (0° = haut). angle>0 = sens horaire, angle<0 = sens anti-horaire
 function arcPath(cx,cy,r,a0,a1){
   const pt=a=>{const rad=a*Math.PI/180;return [cx+r*Math.sin(rad),cy-r*Math.cos(rad)];};
-  if(a1-a0>=359.99)a1=a0+359.99;
-  const [x0,y0]=pt(a0),[x1,y1]=pt(a1),large=(a1-a0)>180?1:0;
-  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  const cl=(a1-a0)>=0?1:0;
+  if(Math.abs(a1-a0)>=359.99)a1=a0+(cl?359.99:-359.99);
+  const [x0,y0]=pt(a0),[x1,y1]=pt(a1),large=Math.abs(a1-a0)>180?1:0;
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} ${cl} ${x1.toFixed(2)} ${y1.toFixed(2)}`;
 }
 // Cadran rotatif (façon EasyPark) : on tourne le bouton, valeur illimitée, clic à chaque cran
 function initWheel(id){
@@ -541,7 +542,9 @@ function paintWheel(id){
   if(arc){
     const frac=Math.min(1,Math.abs(host._cv)/cfg.arcMax);
     arc.style.stroke=host._cv===0?'transparent':`url(#${host._cv>0?'dgg':'dgp'}-${id})`;
-    arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360));
+    // gain (vert) → sens anti-horaire (négatif) ; dépense (rose) → sens horaire
+    const deg=frac*360*(host._cv>0?-1:1);
+    arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,deg));
   }
   const lbl=document.getElementById(id+'-val');
   if(lbl){lbl.innerHTML=cfg.fmt(host._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=host._val<0?'var(--red)':(host._val>0?'var(--green)':'var(--muted)');}
