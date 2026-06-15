@@ -102,6 +102,13 @@
   .wheel-val{text-align:center;font-family:'Space Grotesk',sans-serif;font-size:38px;font-weight:600;margin-bottom:6px;color:var(--muted);transition:color .15s}
   .wheel-val small{font-size:18px;color:var(--muted);font-weight:500}
   .wheel-edit{font-size:15px;opacity:.5;margin-left:8px;vertical-align:middle}
+  .param-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .param-k{font-weight:600;font-size:15px}
+  .param-v{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .switch{flex:0 0 auto;width:50px;height:30px;border-radius:30px;background:var(--card-2);border:1px solid var(--line);position:relative;cursor:pointer;transition:background .2s;padding:0}
+  .switch span{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#8fa0bd;transition:.2s}
+  .switch.on{background:var(--green)}
+  .switch.on span{left:25px;background:#fff}
   .wheel-val.tappable{cursor:pointer}
   .dial{width:230px;max-width:78%;margin:4px auto 0;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   .dial:active{cursor:grabbing}
@@ -364,11 +371,7 @@
     <div class="badges" id="badgeGrid"></div>
     <div class="sec-t">Réglages</div>
     <button class="btn btn-ghost" onclick="openSettings()" style="margin-bottom:10px">⚙️ Modifier mes montants fixes</button>
-    <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
-    <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Sauvegarde complète (JSON)</button>
-    <button class="btn btn-ghost" onclick="authLogout()" style="margin-bottom:10px">🚪 Se déconnecter</button>
-    <button class="btn btn-red" onclick="resetAll()">🗑️ Tout réinitialiser</button>
-    <div class="hint" style="text-align:center;margin-top:16px">Tes données restent privées, uniquement sur cet appareil.</div>
+    <button class="btn btn-ghost" onclick="openParams()">🛠️ Paramètres</button>
   </div>
 </div>
 
@@ -430,7 +433,7 @@ function save(){localStorage.setItem(KEY,JSON.stringify(S));scheduleCloudSync()}
 function scheduleCloudSync(){if(!sb||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,1200)}
 async function saveCloud(){if(!sb||!currentUser)return;try{await sb.from('tresor_states').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()})}catch(e){}}
 async function loadCloud(){if(!sb||!currentUser)return null;try{const{data,error}=await sb.from('tresor_states').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)return null;return data?data.data:null}catch(e){return null}}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -452,6 +455,7 @@ function migrate(){
   if(S.icsUrl===undefined)S.icsUrl='';
   if(!S.calProcessed)S.calProcessed=[];
   if(S.gClientId===undefined)S.gClientId='';
+  if(S.soundOn===undefined)S.soundOn=true;
 }
 
 const $=id=>document.getElementById(id);
@@ -468,6 +472,7 @@ function round2(x){return Math.round(x*100)/100}
 let _actx=null;
 function wheelTick(){
   try{
+    if(S&&S.soundOn===false)return;
     if(!_actx)_actx=new (window.AudioContext||window.webkitAudioContext)();
     if(_actx.state==='suspended')_actx.resume();
     const o=_actx.createOscillator(),g=_actx.createGain(),t=_actx.currentTime;
@@ -951,6 +956,46 @@ function exportCSV(){
   toast('📊','Tableur exporté ! Ouvre-le dans Excel ou Numbers.');
 }
 function resetAll(){if(confirm('Tout effacer et recommencer ? Définitif.')){localStorage.removeItem(KEY);location.reload()}}
+// ===== PAGE PARAMÈTRES =====
+const APP_VERSION='1.4';
+function openParams(){
+  const email=(currentUser&&currentUser.email)||'Compte local';
+  const son=S.soundOn!==false;
+  $('sheetBody').innerHTML=`
+    <h2>🛠️ Paramètres</h2>
+    <div class="sec-t" style="margin-top:14px">👤 Mon compte</div>
+    <div class="param-row"><div><div class="param-k">Connecté</div><div class="param-v">${email}</div></div></div>
+    <button class="btn btn-ghost" onclick="authLogout()" style="margin-bottom:10px">🚪 Se déconnecter</button>
+    <button class="btn btn-red" onclick="deleteAccount()">❌ Supprimer mon compte</button>
+
+    <div class="sec-t" style="margin-top:22px">🔊 Sons & retours</div>
+    <div class="param-row"><div><div class="param-k">Clic de la molette</div><div class="param-v">Petit son à chaque cran (l'iPhone ne vibre pas sur le web)</div></div>
+      <button class="switch ${son?'on':''}" id="swSound" onclick="toggleSound()"><span></span></button></div>
+
+    <div class="sec-t" style="margin-top:22px">💾 Mes données</div>
+    <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
+    <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Sauvegarde complète (JSON)</button>
+    <button class="btn btn-red" onclick="resetAll()">🗑️ Tout réinitialiser</button>
+
+    <div class="sec-t" style="margin-top:22px">ℹ️ À propos</div>
+    <div class="param-row"><div><div class="param-k">Version</div><div class="param-v">Trésor v${APP_VERSION}</div></div></div>
+    <div class="hint" style="margin-top:6px">Tes données t'appartiennent : stockées sur ton appareil et dans ton compte privé. Personne d'autre n'y a accès.</div>`;
+  openSheet();
+}
+function toggleSound(){
+  S.soundOn=S.soundOn===false;save();
+  const b=$('swSound');if(b)b.classList.toggle('on',S.soundOn);
+  if(S.soundOn)wheelTick();
+  toast(S.soundOn?'🔊':'🔇',S.soundOn?'Son de la molette activé.':'Son de la molette coupé.');
+}
+async function deleteAccount(){
+  if(!confirm('Supprimer ton compte et toutes tes données du cloud ? Cette action est définitive.'))return;
+  if(!confirm('Vraiment tout supprimer ? Pense à faire une sauvegarde (JSON) avant.'))return;
+  try{
+    if(sb&&currentUser){await sb.from('tresor_states').delete().eq('user_id',currentUser.id);await sb.auth.signOut();}
+  }catch(e){}
+  localStorage.removeItem(KEY);location.reload();
+}
 
 // ===== NAV / SHEET / TOAST =====
 function go(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));$('v-'+v).classList.add('on');['accueil','analyse','dettes','profil'].forEach(n=>{const b=$('nav-'+n);if(b)b.classList.toggle('on',n===v)});window.scrollTo(0,0)}
