@@ -50,6 +50,23 @@
   .balance .amt{font-family:'Space Grotesk',sans-serif;font-size:42px;font-weight:600;margin:2px 0;letter-spacing:-1px}
   .balance .amt small{font-size:22px;color:var(--muted)}
   .balance .sub{font-size:13px;color:var(--muted)}
+  .bal-row{display:flex;align-items:flex-end;justify-content:space-between;gap:14px}
+  .bal-row .amt{font-size:54px}
+  .bal-row .amt small{font-size:26px}
+  .prev{text-align:right;padding-bottom:8px}
+  .prev .plab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .prev .pval{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;color:var(--muted);opacity:.8}
+  .advice{margin-top:14px;border-radius:20px;padding:18px;border:1px solid var(--line);background:var(--card)}
+  .advice.good{border-color:rgba(52,211,153,.4);background:linear-gradient(160deg,rgba(52,211,153,.12),rgba(52,211,153,.03))}
+  .advice.warn{border-color:rgba(245,180,60,.35);background:linear-gradient(160deg,rgba(245,180,60,.10),transparent)}
+  .advice.bad{border-color:rgba(248,113,113,.45);background:linear-gradient(160deg,rgba(248,113,113,.13),transparent)}
+  .advice .ah{display:flex;align-items:center;gap:12px}
+  .advice .aic{font-size:30px;line-height:1}
+  .advice .at{font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600}
+  .advice .ad{font-size:13.5px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .advice .ad b{color:var(--text)}
+  .advice .curve{margin-top:14px}
+  .advice .curve svg{width:100%;height:auto;display:block;overflow:visible}
 
   /* TIRELIRE */
   .piggy{margin-top:14px;background:linear-gradient(160deg,#1c2230,#161b26);border:1px solid rgba(167,139,250,.25);border-radius:20px;padding:20px}
@@ -162,6 +179,8 @@
   /* SILO DETTE */
   .swipe-row{position:relative;border-radius:18px;overflow:hidden;margin-bottom:12px}
   .swipe-del{position:absolute;top:0;right:0;bottom:0;width:84px;background:linear-gradient(180deg,#e05656,var(--red));color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:600;line-height:1.3;cursor:pointer;z-index:1}
+  .swipe-edit{position:absolute;top:0;right:0;bottom:0;width:84px;background:linear-gradient(180deg,#5b9dff,var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:600;line-height:1.3;cursor:pointer;z-index:1}
+  .pdate{font-size:14px;font-weight:600;color:var(--text);margin-top:3px}
   .swipe-content{position:relative;z-index:2;touch-action:pan-y}
   .swipe-row .dsilo{margin-bottom:0}
   .dsilo{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:12px}
@@ -177,6 +196,11 @@
   .dsilo .done-tag{color:var(--green);font-weight:600;font-size:13px}
 
   .badges{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .badges-acc{margin:18px 0}
+  .badges-acc summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;list-style:none;padding:6px 0}
+  .badges-acc summary::-webkit-details-marker{display:none}
+  .badges-acc summary::after{content:' ›';transition:transform .2s;display:inline-block}
+  .badges-acc[open] summary::after{transform:rotate(90deg)}
   .badge{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;text-align:center}
   .badge.locked{opacity:.35}
   .badge .e{font-size:28px;margin-bottom:8px}
@@ -304,9 +328,17 @@
     <div class="balance">
       <button class="combat-chip" onclick="go('profil')" title="Mes combats">🎯 <span id="combatChipN">0/0</span></button>
       <div class="lab">Solde actuel</div>
-      <div class="amt num" id="soldeBig">0<small> €</small></div>
-      <div class="sub" id="soldeSub">—</div>
+      <div class="bal-row">
+        <div class="amt num" id="soldeBig">0<small> €</small></div>
+        <div class="prev"><div class="plab">Prévisionnel</div><div class="pval num" id="prevBig">—</div></div>
+      </div>
     </div>
+
+    <!-- CADRAN CONSEIL -->
+    <div class="advice" id="advice"></div>
+
+    <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
+    <div id="plannedList"></div>
 
     <!-- TIRELIRE -->
     <div class="piggy">
@@ -322,14 +354,7 @@
       </div>
     </div>
 
-    <div class="rewardcard" id="rewardCard"></div>
-
-    <div class="alert" id="proj"><div class="ic">📊</div><div><div class="t" id="projT">—</div><div class="d" id="projD">—</div></div></div>
-
-    <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
-    <div id="plannedList"></div>
-
-    <div class="alert" id="hygiene"><div class="ic">🫀</div><div style="flex:1"><div class="t" id="hygT">—</div><div class="d" id="hygD">—</div><div class="bar" id="hygBar" style="margin-top:10px"><i style="width:0"></i></div></div></div>
+    <div class="rewardcard" id="rewardCard" style="display:none"></div>
 
     <div class="sec-t">Derniers mouvements</div>
     <div id="txList"></div>
@@ -367,8 +392,7 @@
       <div class="stat"><div class="v num" id="stLvl">1</div><div class="k">Niveau</div></div>
     </div>
     <div class="lifecard" id="combatCard"></div>
-    <div class="sec-t">Mes badges</div>
-    <div class="badges" id="badgeGrid"></div>
+    <details class="badges-acc"><summary>🏅 Mes badges</summary><div class="badges" id="badgeGrid" style="margin-top:12px"></div></details>
     <div class="sec-t">Réglages</div>
     <button class="btn btn-ghost" onclick="openSettings()" style="margin-bottom:10px">⚙️ Modifier mes montants fixes</button>
     <button class="btn btn-ghost" onclick="openParams()">🛠️ Paramètres</button>
@@ -385,15 +409,8 @@
 
 <div class="fab-wrap">
   <button class="scan-fab" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
-  <button class="mic-fab" id="micFab" title="Maintiens pour parler"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></button>
 </div>
 <input type="file" id="scanInput" accept="image/*" capture="environment" style="display:none" onchange="handleScan(this)">
-
-<div class="voice" id="voice">
-  <div class="vmic"><svg viewBox="0 0 24 24" width="46" height="46" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></div>
-  <div class="vtxt" id="vtxt">Parle…</div>
-  <div class="vhint">Garde le doigt appuyé et parle.<br>Relâche pour valider.<br><br>Ex : « 4,50 pour un sandwich » ou « pain au choco à 1,40 au lieu d'un éclair à 2,70 »</div>
-</div>
 
 <div class="sheet-bg" id="sheetBg" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
@@ -433,7 +450,7 @@ function save(){localStorage.setItem(KEY,JSON.stringify(S));scheduleCloudSync()}
 function scheduleCloudSync(){if(!sb||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,1200)}
 async function saveCloud(){if(!sb||!currentUser)return;try{await sb.from('tresor_states').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()})}catch(e){}}
 async function loadCloud(){if(!sb||!currentUser)return null;try{const{data,error}=await sb.from('tresor_states').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)return null;return data?data.data:null}catch(e){return null}}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,showReward:false,game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -456,6 +473,7 @@ function migrate(){
   if(!S.calProcessed)S.calProcessed=[];
   if(S.gClientId===undefined)S.gClientId='';
   if(S.soundOn===undefined)S.soundOn=true;
+  if(S.showReward===undefined)S.showReward=false;
 }
 
 const $=id=>document.getElementById(id);
@@ -800,7 +818,8 @@ function deletePiggy(){
 function renderPlanned(){
   const today=todayStr();
   const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
-  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.55':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="m">${past?'à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})"><span>✏️<br>Modif.</span></div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.6':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="pdate">${past?'⚠️ à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  attachSwipe();
 }
 
 // ===== GAMIFICATION =====
@@ -924,14 +943,43 @@ function hygiene(){
   else{label='Critique';cls='bad';msg='Danger : tu t\'apprêtes à vivre au-dessus de tes moyens.';}
   return {score,label,cls,msg,planned,after};
 }
-function renderHygiene(){
-  const h=hygiene();const el=$('hygiene');if(!el)return;
-  el.className='alert '+h.cls;
-  el.querySelector('.ic').textContent=h.cls==='good'?'💚':h.cls==='bad'?'🔴':'🟡';
-  $('hygT').textContent=`Hygiène financière : ${h.label} (${h.score}/100)`;
-  $('hygD').innerHTML=h.planned>0?`${h.msg}<br><span style="font-size:12px">Après tes <b>${eur(h.planned)} €</b> prévus, il te resterait <b style="color:${h.after<0?'var(--red)':'var(--text)'}">${eur(h.after)} €</b>.</span>`:h.msg;
-  const bar=$('hygBar');bar.className='bar'+(h.score<30?' hot':h.score<60?' mid':'');
-  bar.querySelector('i').style.width=h.score+'%';
+// Cadran conseil : projette le solde dans le temps. Courbe + date de découvert seulement si danger.
+function renderAdvice(){
+  const el=$('advice');if(!el)return;
+  const today=new Date();today.setHours(0,0,0,0);
+  const dailyFlow=(S.revFixe-S.chargeFixe-S.budgetVar)/30;
+  const days=120,pts=[];let dipDay=-1,minBal=Infinity;
+  for(let d=0;d<=days;d++){
+    const ds=new Date(today.getTime()+d*864e5).toISOString().slice(0,10);
+    const spent=(S.planned||[]).filter(p=>p.date<=ds).reduce((a,p)=>a+p.amount,0);
+    const bal=S.solde+dailyFlow*d-spent;
+    pts.push(bal);if(bal<minBal)minBal=bal;if(bal<0&&dipDay<0)dipDay=d;
+  }
+  const prevAfter=S.solde-(S.planned||[]).reduce((a,p)=>a+p.amount,0);
+  let cls,ic,title,desc,curve='';
+  if(dipDay>=0){
+    cls='bad';ic='🔴';title='Découvert en vue';
+    const dd=new Date(today.getTime()+dipDay*864e5).toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
+    desc=`À ce rythme, tu passes <b style="color:var(--red)">sous zéro vers le ${dd}</b>. Anticipe : rentre de l'argent, reporte ou coupe une dépense.`;
+    curve=`<div class="curve">${sparkline(pts,dipDay)}</div>`;
+  } else if(minBal<150||prevAfter<150){
+    cls='warn';ic='🟠';title='Marge serrée';
+    desc=`Ta marge descend jusqu'à <b>${eur(Math.max(0,Math.round(minBal)))} €</b>. Reste prudent jusqu'à ta prochaine rentrée.`;
+  } else {
+    cls='good';ic='🟢';title='Tout roule';
+    desc='Tes finances sont saines — beau pilotage 💚';
+  }
+  el.className='advice '+cls;
+  el.innerHTML=`<div class="ah"><div class="aic">${ic}</div><div class="at">${title}</div></div><div class="ad">${desc}</div>${curve}`;
+}
+function sparkline(pts,dipDay){
+  const W=320,H=92,pad=8;
+  const max=Math.max(...pts,0),min=Math.min(...pts,0),range=(max-min)||1;
+  const X=i=>pad+i/(pts.length-1)*(W-2*pad),Y=v=>pad+(max-v)/range*(H-2*pad);
+  let d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
+  for(let i=1;i<pts.length;i++)d+=' L '+X(i).toFixed(1)+' '+Y(pts[i]).toFixed(1);
+  const zy=Y(0).toFixed(1),dx=X(dipDay).toFixed(1),dyv=Y(0).toFixed(1);
+  return `<svg viewBox="0 0 ${W} ${H}"><line x1="${pad}" y1="${zy}" x2="${W-pad}" y2="${zy}" stroke="var(--line)" stroke-dasharray="4 4"/><path d="${d}" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linejoin="round"/><line x1="${dx}" y1="${pad}" x2="${dx}" y2="${H-pad}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="3 3" opacity=".7"/><circle cx="${dx}" cy="${dyv}" r="4" fill="var(--red)"/></svg>`;
 }
 
 // ===== RÉGLAGES =====
@@ -996,9 +1044,11 @@ function openParams(){
     <button class="btn btn-ghost" onclick="authLogout()" style="margin-bottom:10px">🚪 Se déconnecter</button>
     <button class="btn btn-red" onclick="deleteAccount()">❌ Supprimer mon compte</button>
 
-    <div class="sec-t" style="margin-top:22px">🔊 Sons & retours</div>
+    <div class="sec-t" style="margin-top:22px">🎨 Affichage & retours</div>
     <div class="param-row"><div><div class="param-k">Clic de la molette</div><div class="param-v">Petit son à chaque cran (l'iPhone ne vibre pas sur le web)</div></div>
       <button class="switch ${son?'on':''}" id="swSound" onclick="toggleSound()"><span></span></button></div>
+    <div class="param-row"><div><div class="param-k">Carte « récompense »</div><div class="param-v">Afficher le projet plaisir / craquage mérité sur l'accueil</div></div>
+      <button class="switch ${S.showReward?'on':''}" id="swReward" onclick="toggleReward()"><span></span></button></div>
 
     <div class="sec-t" style="margin-top:22px">💾 Mes données</div>
     <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
@@ -1015,6 +1065,12 @@ function toggleSound(){
   const b=$('swSound');if(b)b.classList.toggle('on',S.soundOn);
   if(S.soundOn)wheelTick();
   toast(S.soundOn?'🔊':'🔇',S.soundOn?'Son de la molette activé.':'Son de la molette coupé.');
+}
+function toggleReward(){
+  S.showReward=!S.showReward;save();
+  const b=$('swReward');if(b)b.classList.toggle('on',S.showReward);
+  render();
+  toast(S.showReward?'🎁':'🙈',S.showReward?'Récompense affichée sur l\'accueil.':'Récompense masquée.');
 }
 async function deleteAccount(){
   if(!confirm('Supprimer ton compte et toutes tes données du cloud ? Cette action est définitive.'))return;
@@ -1062,7 +1118,9 @@ function render(){
   const m=monthOf(todayStr());
   const inM=S.tx.filter(t=>t.type==='in'&&monthOf(t.date)===m).reduce((a,t)=>a+t.amount,0);
   const outM=S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).reduce((a,t)=>a+t.amount,0);
-  $('soldeSub').innerHTML=`Ce mois : <span style="color:var(--green)">+${eur(inM)}</span> · <span style="color:var(--red)">–${eur(outM)}</span> €`;
+  const prevSolde=S.solde-(S.planned||[]).reduce((a,p)=>a+p.amount,0);
+  $('prevBig').innerHTML=eur(prevSolde)+' €';
+  $('prevBig').style.color=prevSolde<0?'var(--red)':'var(--muted)';
 
   // tirelire
   $('piggyAmt').textContent=eur2(S.tirelire)+' €';
@@ -1071,9 +1129,6 @@ function render(){
   $('palFill').style.width=(ready>=1?100:palProg)+'%';
   $('palInfo').innerHTML=ready>=1?`🪙 <b style="color:var(--violet)">${ready} palier(s) de ${S.palier} €</b> prêt(s) à verser !`:`Plus que <b style="color:var(--text)">${eur2(S.palier-(S.tirelire%S.palier))} €</b> avant ton prochain palier de ${S.palier} €.`;
   $('pourBtn').disabled=!(ready>=1&&S.debts.some(d=>d.pot<d.goal));
-
-  // projection
-  const p=projection();$('proj').className='alert '+p.cls;$('proj').querySelector('.ic').textContent=p.ic;$('projT').textContent=p.t;$('projD').innerHTML=p.d;
 
   // tx
   const list=S.tx.slice(0,12);
@@ -1100,7 +1155,7 @@ function render(){
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 
-  renderCombats();renderReward();renderPlanned();renderHygiene();
+  renderCombats();renderReward();renderPlanned();renderAdvice();
   const chip=$('combatChipN');if(chip){const done=(S.combats||[]).filter(id=>actionDoneToday(id)).length;chip.textContent=done+'/'+((S.combats||[]).length||0)}
 }
 function renderCombats(){
@@ -1111,6 +1166,8 @@ function renderCombats(){
 }
 function renderReward(){
   const card=$('rewardCard');
+  if(!S.showReward){card.style.display='none';return}
+  card.style.display='';
   if(!S.reward.project){card.innerHTML=`<div class="cardh"><div class="ct">🎁 Ma récompense</div></div><div class="hint" style="margin-bottom:12px">Définis un projet plaisir (déco, sortie, matos…). En gérant bien, tu débloques un craquage légitime — quitte à manger des pâtes 😄</div><button class="btn btn-ghost" onclick="openReward()">Définir mon projet</button>`;return}
   const m=S.reward.merite,thr=S.reward.threshold,pct=Math.min(100,m/thr*100),ready=m>=thr;
   card.innerHTML=`<div class="rh"><div class="rp">🎁 ${S.reward.project}</div>${S.reward.unlocked>0?`<div class="ru">🏅 ${S.reward.unlocked} débloqué(s)</div>`:''}</div><div class="merite-bar"><i style="width:${pct}%"></i></div><div class="hint">${ready?'Tu l\'as mérité ! Encaisse ton craquage 🎉':`Encore <b style="color:var(--text)">${Math.max(0,Math.round(thr-m))} pts de mérite</b> avant ta récompense.`}</div>${ready?`<button class="claim-btn" onclick="claimReward()">🎉 Encaisser mon craquage mérité</button>`:''}<button class="lnk-edit" onclick="openReward()">Modifier le projet</button>`;
@@ -1226,13 +1283,7 @@ function addScanned(mode){
   bumpStreak();save();closeSheet();render();toast('🧾','Dépenses du ticket ajoutées !');
 }
 
-// talkie : maintiens pour parler, relâche pour valider
-const mf=$('micFab');
-mf.addEventListener('pointerdown',holdStart);
-mf.addEventListener('pointerup',holdEnd);
-mf.addEventListener('pointerleave',holdEnd);
-mf.addEventListener('pointercancel',holdEnd);
-mf.addEventListener('contextmenu',e=>e.preventDefault());
+// (dictée vocale retirée — peu fiable)
 
 // ===== AGENDA → DÉPENSES PROBABLES (cloche + cartes + roulette) =====
 let calPending=[],calIdx=0,calAmt=10,gTokenClient=null;
@@ -1331,7 +1382,8 @@ function deleteDebt(id){
   S.debts=S.debts.filter(x=>x.id!==id);save();render();toast('🗑️','Silo supprimé.');
 }
 function attachSwipe(){
-  document.querySelectorAll('#debtList .swipe-content').forEach(el=>{
+  document.querySelectorAll('.swipe-content').forEach(el=>{
+    if(el._sw)return;el._sw=true;
     let x0=0,y0=0,cur=0,drag=null;const W=84;
     const set=v=>{cur=v;el.style.transform='translateX('+v+'px)';};
     el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;drag=null;el.style.transition='none';},{passive:true});
