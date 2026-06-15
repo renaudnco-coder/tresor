@@ -179,7 +179,8 @@
   /* SILO DETTE */
   .swipe-row{position:relative;border-radius:18px;overflow:hidden;margin-bottom:12px}
   .swipe-del{position:absolute;top:0;right:0;bottom:0;width:84px;background:linear-gradient(180deg,#e05656,var(--red));color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:600;line-height:1.3;cursor:pointer;z-index:1}
-  .swipe-edit{position:absolute;top:0;right:0;bottom:0;width:84px;background:linear-gradient(180deg,#5b9dff,var(--blue));color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:600;line-height:1.3;cursor:pointer;z-index:1}
+  .swipe-edit{position:absolute;top:0;right:0;bottom:0;width:84px;background:var(--card-2);color:var(--muted);display:flex;align-items:center;justify-content:center;text-align:center;font-size:13px;font-weight:600;cursor:pointer;z-index:1}
+  .swipe-row .tx{margin-bottom:0;border-radius:18px}
   .pdate{font-size:14px;font-weight:600;color:var(--text);margin-top:3px}
   .swipe-content{position:relative;z-index:2;touch-action:pan-y}
   .swipe-row .dsilo{margin-bottom:0}
@@ -402,13 +403,13 @@
 <div class="nav">
   <button class="on" id="nav-accueil" onclick="go('accueil')"><svg viewBox="0 0 24 24"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>Accueil</button>
   <button id="nav-analyse" onclick="go('analyse')"><svg viewBox="0 0 24 24"><path d="M5 21V9M12 21V4M19 21v-7"/></svg>Analyse</button>
-  <button class="add" onclick="openAdd()"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="add" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
   <button id="nav-dettes" onclick="go('dettes')"><svg viewBox="0 0 24 24"><path d="M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>Silos</button>
   <button id="nav-profil" onclick="go('profil')"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Profil</button>
 </div>
 
 <div class="fab-wrap">
-  <button class="scan-fab" onclick="document.getElementById('scanInput').click()" title="Scanner un ticket"><svg viewBox="0 0 24 24"><path d="M3 9V6a2 2 0 0 1 2-2h2M17 4h2a2 2 0 0 1 2 2v3M21 15v3a2 2 0 0 1-2 2h-2M7 20H5a2 2 0 0 1-2-2v-3"/><circle cx="12" cy="12" r="3"/></svg></button>
+  <button class="scan-fab" onclick="openAdd()" title="Ajouter un mouvement"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 <input type="file" id="scanInput" accept="image/*" capture="environment" style="display:none" onchange="handleScan(this)">
 
@@ -818,7 +819,7 @@ function deletePiggy(){
 function renderPlanned(){
   const today=todayStr();
   const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
-  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})"><span>✏️<br>Modif.</span></div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.6':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="pdate">${past?'⚠️ à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.6':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="pdate">${past?'⚠️ à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
   attachSwipe();
 }
 
@@ -955,31 +956,29 @@ function renderAdvice(){
     const bal=S.solde+dailyFlow*d-spent;
     pts.push(bal);if(bal<minBal)minBal=bal;if(bal<0&&dipDay<0)dipDay=d;
   }
-  const prevAfter=S.solde-(S.planned||[]).reduce((a,p)=>a+p.amount,0);
-  let cls,ic,title,desc,curve='';
+  // analyse des dépenses du mois (une phrase)
+  const mm=monthOf(todayStr());
+  const out=S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===mm).reduce((a,t)=>a+t.amount,0);
+  const byCat={};S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===mm).forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
+  const top=Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+  let spend;
+  if(out<=0)spend='Aucune dépense notée ce mois';
+  else if(top)spend=`Tu as dépensé ${eur(out)} € ce mois, surtout en ${catOf(top[0]).n.toLowerCase()} (${eur(top[1])} €)`;
+  else spend=`Tu as dépensé ${eur(out)} € ce mois`;
+  let cls,ic,title,risk;
   if(dipDay>=0){
     cls='bad';ic='🔴';title='Découvert en vue';
     const dd=new Date(today.getTime()+dipDay*864e5).toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
-    desc=`À ce rythme, tu passes <b style="color:var(--red)">sous zéro vers le ${dd}</b>. Anticipe : rentre de l'argent, reporte ou coupe une dépense.`;
-    curve=`<div class="curve">${sparkline(pts,dipDay)}</div>`;
-  } else if(minBal<150||prevAfter<150){
+    risk=`risque de <b style="color:var(--red)">découvert vers le ${dd}</b>`;
+  } else if(minBal<150){
     cls='warn';ic='🟠';title='Marge serrée';
-    desc=`Ta marge descend jusqu'à <b>${eur(Math.max(0,Math.round(minBal)))} €</b>. Reste prudent jusqu'à ta prochaine rentrée.`;
+    risk=`pas de découvert prévu mais une marge basse (jusqu'à <b>${eur(Math.max(0,Math.round(minBal)))} €</b>)`;
   } else {
     cls='good';ic='🟢';title='Tout roule';
-    desc='Tes finances sont saines — beau pilotage 💚';
+    risk='aucun risque de découvert en vue';
   }
   el.className='advice '+cls;
-  el.innerHTML=`<div class="ah"><div class="aic">${ic}</div><div class="at">${title}</div></div><div class="ad">${desc}</div>${curve}`;
-}
-function sparkline(pts,dipDay){
-  const W=320,H=92,pad=8;
-  const max=Math.max(...pts,0),min=Math.min(...pts,0),range=(max-min)||1;
-  const X=i=>pad+i/(pts.length-1)*(W-2*pad),Y=v=>pad+(max-v)/range*(H-2*pad);
-  let d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
-  for(let i=1;i<pts.length;i++)d+=' L '+X(i).toFixed(1)+' '+Y(pts[i]).toFixed(1);
-  const zy=Y(0).toFixed(1),dx=X(dipDay).toFixed(1),dyv=Y(0).toFixed(1);
-  return `<svg viewBox="0 0 ${W} ${H}"><line x1="${pad}" y1="${zy}" x2="${W-pad}" y2="${zy}" stroke="var(--line)" stroke-dasharray="4 4"/><path d="${d}" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linejoin="round"/><line x1="${dx}" y1="${pad}" x2="${dx}" y2="${H-pad}" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="3 3" opacity=".7"/><circle cx="${dx}" cy="${dyv}" r="4" fill="var(--red)"/></svg>`;
+  el.innerHTML=`<div class="ah"><div class="aic">${ic}</div><div class="at">${title}</div></div><div class="ad">${spend} — ${risk}.</div>`;
 }
 
 // ===== RÉGLAGES =====
