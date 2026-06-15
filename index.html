@@ -56,6 +56,7 @@
   .prev{text-align:right;padding-bottom:8px}
   .prev .plab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
   .prev .pval{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;color:var(--muted);opacity:.8}
+  .prev .pdt{font-size:11px;color:var(--muted);margin-top:2px}
   .advice{margin-top:14px;border-radius:20px;padding:18px;border:1px solid var(--line);background:var(--card)}
   .advice.good{border-color:rgba(52,211,153,.4);background:linear-gradient(160deg,rgba(52,211,153,.12),rgba(52,211,153,.03))}
   .advice.warn{border-color:rgba(245,180,60,.35);background:linear-gradient(160deg,rgba(245,180,60,.10),transparent)}
@@ -225,7 +226,7 @@
   .nav button{background:none;border:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;cursor:pointer;font-family:'Inter',sans-serif;transition:color .25s;padding:4px 8px}
   .nav button.on{color:var(--text)}
   .nav button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  .nav .add{background:var(--green);color:#062018;width:54px;height:54px;border-radius:50%;margin-top:-26px;box-shadow:0 8px 24px -6px rgba(52,211,153,.6)}
+  .nav .add{background:var(--green);color:#062018;width:54px;height:54px;border-radius:50%;margin-top:-26px;box-shadow:0 8px 24px -6px rgba(52,211,153,.6);justify-content:center;padding:0}
   .nav .add svg{width:26px;height:26px;stroke-width:2.5}
 
   .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:50;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -333,7 +334,7 @@
       <div class="lab">Solde actuel</div>
       <div class="bal-row">
         <div class="amt num" id="soldeBig">0<small> €</small></div>
-        <div class="prev"><div class="plab">Prévisionnel</div><div class="pval num" id="prevBig">—</div></div>
+        <div class="prev"><div class="plab">Prévisionnel</div><div class="pval num" id="prevBig">—</div><div class="pdt" id="prevDate"></div></div>
       </div>
     </div>
 
@@ -1135,6 +1136,9 @@ function render(){
   const prevSolde=S.solde-(S.planned||[]).reduce((a,p)=>a+p.amount,0);
   $('prevBig').innerHTML=eur(prevSolde)+' €';
   $('prevBig').style.color=prevSolde<0?'var(--red)':'var(--muted)';
+  const futur=(S.planned||[]).map(p=>p.date).filter(d=>d>=todayStr()).sort();
+  const lastD=futur.length?futur[futur.length-1]:null;
+  $('prevDate').textContent=lastD?('au '+new Date(lastD).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})):'';
 
   // tirelire
   $('piggyAmt').textContent=eur2(S.tirelire)+' €';
