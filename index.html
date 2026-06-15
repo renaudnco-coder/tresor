@@ -503,19 +503,23 @@ function arcPath(cx,cy,r,a0,a1){
 function initWheel(id){
   const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;
   if(cfg.min==null)cfg.min=0;
-  cfg.perTurn=cfg.perTurn||40*cfg.step;            // valeur couverte par un tour complet
+  cfg.perTurn=cfg.perTurn||40*cfg.step;            // valeur ajoutée par un tour de doigt complet
+  cfg.arcMax=cfg.arcMax||cfg.perTurn;               // valeur à laquelle le cercle est entièrement rempli
   cfg.degPerStep=360*cfg.step/cfg.perTurn;          // angle d'un cran
   const R=104,ticks=40;let tk='';
   for(let i=0;i<ticks;i++){const a=i/ticks*2*Math.PI,s=Math.sin(a),c=-Math.cos(a);tk+=`<line x1="${(120+s*(R-3)).toFixed(1)}" y1="${(120+c*(R-3)).toFixed(1)}" x2="${(120+s*(R-16)).toFixed(1)}" y2="${(120+c*(R-16)).toFixed(1)}"/>`;}
-  host.innerHTML=`<svg viewBox="0 0 240 240" class="dial-svg"><defs><linearGradient id="dg-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b14fc8"/><stop offset="1" stop-color="#ff5a98"/></linearGradient></defs><circle cx="120" cy="120" r="${R}" class="dial-track"/><path class="dial-arc" style="stroke:url(#dg-${id})" d=""/><g class="dial-ticks">${tk}</g></svg>`;
+  host.innerHTML=`<svg viewBox="0 0 240 240" class="dial-svg"><defs>`
+    +`<linearGradient id="dgp-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b14fc8"/><stop offset="1" stop-color="#ff5a98"/></linearGradient>`
+    +`<linearGradient id="dgg-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22b88a"/><stop offset="1" stop-color="#34d399"/></linearGradient>`
+    +`</defs><circle cx="120" cy="120" r="${R}" class="dial-track"/><path class="dial-arc" d=""/><g class="dial-ticks">${tk}</g></svg>`;
   host._cv=(cfg.value!=null?cfg.value:cfg.min);
   host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);
   host._step=Math.round(host._cv/cfg.step);
   let drag=false,lastA=0;
   const ang=e=>{const r=host.getBoundingClientRect(),t=e.touches?e.touches[0]:e;return Math.atan2(t.clientX-(r.left+r.width/2),-(t.clientY-(r.top+r.height/2)))*180/Math.PI;};
-  const down=e=>{drag=true;lastA=ang(e);};
+  const down=e=>{drag=true;lastA=ang(e);cancelAnimationFrame(host._raf);};
   const moveH=e=>{if(!drag)return;if(e.cancelable)e.preventDefault();let a=ang(e),d=a-lastA;if(d>180)d-=360;if(d<-180)d+=360;lastA=a;
-    host._cv+=d/cfg.degPerStep*cfg.step;
+    host._cv+=(cfg.invert?-1:1)*d/cfg.degPerStep*cfg.step;
     if(host._cv<cfg.min)host._cv=cfg.min;
     if(cfg.max!=null&&host._cv>cfg.max)host._cv=cfg.max;
     const st=Math.round(host._cv/cfg.step);host._val=round2(st*cfg.step);
@@ -531,14 +535,35 @@ function initWheel(id){
 function paintWheel(id){
   const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;
   const arc=host.querySelector('.dial-arc'),tg=host.querySelector('.dial-ticks');
-  if(tg)tg.setAttribute('transform',`rotate(${(host._cv/cfg.step*cfg.degPerStep).toFixed(2)} 120 120)`);
-  if(arc){const within=((host._cv-cfg.min)%cfg.perTurn+cfg.perTurn)%cfg.perTurn;let frac=within/cfg.perTurn;if(host._cv>cfg.min&&frac===0)frac=1;arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360));}
+  // les graduations suivent le doigt
+  if(tg)tg.setAttribute('transform',`rotate(${((cfg.invert?-1:1)*host._cv/cfg.step*cfg.degPerStep).toFixed(2)} 120 120)`);
+  // l'arc se remplit de 0 au cercle complet puis s'arrête (pas de boucle) ; rose = dépense, vert = gain
+  if(arc){
+    const frac=Math.min(1,Math.abs(host._cv)/cfg.arcMax);
+    arc.style.stroke=host._cv===0?'transparent':`url(#${host._cv>0?'dgg':'dgp'}-${id})`;
+    arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360));
+  }
   const lbl=document.getElementById(id+'-val');
   if(lbl){lbl.innerHTML=cfg.fmt(host._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=host._val<0?'var(--red)':(host._val>0?'var(--green)':'var(--muted)');}
   if(cfg.onChange)cfg.onChange(host._val);
 }
 function wheelValue(id){const w=document.getElementById(id);return w&&w._val!==undefined?w._val:(WHEELS[id]?WHEELS[id].value:0)}
-function setWheel(id,v){const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;host._cv=Math.max(cfg.min,cfg.max!=null?Math.min(cfg.max,v):v);host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);host._step=Math.round(host._cv/cfg.step);wheelTick();paintWheel(id);}
+// Réglage par bouton/chip → remplissage animé lent
+function setWheel(id,v){
+  const cfg=WHEELS[id],host=document.getElementById(id);if(!cfg||!host)return;
+  const target=Math.max(cfg.min,cfg.max!=null?Math.min(cfg.max,v):v);
+  const from=host._cv||0,dur=850,t0=performance.now();
+  cancelAnimationFrame(host._raf);wheelTick();
+  function frame(t){
+    const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);
+    host._cv=from+(target-from)*e;
+    host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);host._step=Math.round(host._cv/cfg.step);
+    paintWheel(id);
+    if(k<1)host._raf=requestAnimationFrame(frame);
+    else{host._cv=target;host._val=round2(Math.round(target/cfg.step)*cfg.step);host._step=Math.round(target/cfg.step);paintWheel(id);}
+  }
+  host._raf=requestAnimationFrame(frame);
+}
 
 function finishOnboarding(){
   S=fresh();
@@ -732,7 +757,7 @@ function openEditPlanned(id){
 }
 function saveEditPlanned(){const p=S.planned.find(x=>x.id===editPlannedId);if(!p)return;const amt=+$('pAmt').value;if(!amt||amt<=0){toast('⚠️','Montant ?');return}p.label=$('pLabel').value.trim()||'Dépense prévue';p.amount=amt;p.date=$('pDate').value||p.date;save();closeSheet();render();toast('✏️','Prévision modifiée.')}
 function deletePlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;S.planned.splice(i,1);save();closeSheet();render();toast('🗑️','Prévision supprimée.')}
-function convertPlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;const p=S.planned[i];S.tx.unshift({id:Date.now(),date:todayStr(),type:'out',amount:p.amount,cat:'autre',note:p.label});S.solde-=p.amount;S.planned.splice(i,1);award(5);bumpStreak();save();closeSheet();render();toast('✅','Dépense notée et retirée du prévisionnel.')}
+function convertPlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;const p=S.planned[i];const gain=p.amount<0;S.tx.unshift({id:Date.now(),date:todayStr(),type:gain?'in':'out',amount:Math.abs(p.amount),cat:gain?'revenu':'autre',note:p.label});S.solde-=p.amount;S.planned.splice(i,1);award(5);bumpStreak();save();closeSheet();render();toast('✅',gain?'Gain encaissé et retiré du prévisionnel.':'Dépense notée et retirée du prévisionnel.')}
 function openCatDetail(cid){
   const c=catOf(cid),m=monthOf(todayStr());
   const list=S.tx.filter(t=>t.type==='out'&&t.cat===cid&&monthOf(t.date)===m).sort((a,b)=>a.date<b.date?1:-1);
@@ -772,7 +797,7 @@ function deletePiggy(){
 function renderPlanned(){
   const today=todayStr();
   const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
-  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.55':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="m">${past?'à régulariser · ':''}${d}</div></div><div class="amt">${eur(p.amount)} €</div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});return `<div class="tx" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.55':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="m">${past?'à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
 }
 
 // ===== GAMIFICATION =====
@@ -1246,8 +1271,9 @@ function renderSwipeCard(){
     <h2>📅 Combien ça va coûter ?</h2>
     <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
     <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
-    <div style="margin-top:16px">${wheelMarkup('calWheel',{min:0,step:5,value:10,perTurn:200,money:true,fmt:v=>v>0?(eur(v)+' <small>€</small>'):'<small>Gratuit</small>',onChange:()=>{}})}</div>
-    <div class="cal-chips" style="margin-top:10px">${[[0,'Gratuit'],[10,'10 €'],[50,'50 €'],[100,'100 €'],[500,'500 €']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
+    <div class="lead" style="margin-top:6px;font-size:12.5px">Tourne le cadran : <b style="color:var(--red)">🔴 dépense</b> dans un sens, <b style="color:var(--green)">🟢 gain</b> dans l'autre</div>
+    <div style="margin-top:10px">${wheelMarkup('calWheel',{min:-1e9,max:1e9,step:5,value:0,perTurn:120,arcMax:300,invert:true,money:true,fmt:v=>v===0?'<small>Gratuit</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:()=>{}})}</div>
+    <div class="cal-chips" style="margin-top:10px">${[[0,'Gratuit'],[-10,'−10 €'],[-50,'−50 €'],[-100,'−100 €'],[-500,'−500 €']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
     <div style="display:flex;gap:12px;margin-top:18px">
       <button class="btn btn-ghost" style="flex:1" onclick="calSkip()">✕ Gratuit</button>
       <button class="btn btn-pri" style="flex:1" onclick="calAdd()">✓ Prévoir</button>
@@ -1257,10 +1283,11 @@ function renderSwipeCard(){
 }
 function calAdd(){
   const ev=calPending[calIdx];if(!ev)return;
-  const amt=Math.max(0,wheelValue('calWheel')||0);
-  if(amt>0)S.planned.push({id:Date.now(),label:ev.summary,amount:amt,date:ev.start});
+  const dv=wheelValue('calWheel')||0;            // <0 = dépense, >0 = gain
+  if(dv!==0)S.planned.push({id:Date.now(),label:ev.summary,amount:-dv,date:ev.start});
   S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
-  if(amt>0)toast('📅',`${eur(amt)} € ajoutés à tes dépenses prévues.`);
+  if(dv<0)toast('📅',`${eur(-dv)} € de dépense prévus.`);
+  else if(dv>0)toast('💰',`${eur(dv)} € de gain prévus.`);
 }
 function calSkip(){
   const ev=calPending[calIdx];if(!ev)return;
