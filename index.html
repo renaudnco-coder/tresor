@@ -67,6 +67,8 @@
   .advice .ad b{color:var(--text)}
   .advice .curve{margin-top:14px}
   .advice .curve svg{width:100%;height:auto;display:block;overflow:visible}
+  .advice .atip{margin-top:12px;padding:11px 13px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:13px;font-size:13px;line-height:1.5;color:var(--text)}
+  .advice .atip b{color:var(--text);font-weight:600}
 
   /* TIRELIRE */
   .piggy{margin-top:14px;background:linear-gradient(160deg,#1c2230,#161b26);border:1px solid rgba(167,139,250,.25);border-radius:20px;padding:20px}
@@ -965,20 +967,33 @@ function renderAdvice(){
   if(out<=0)spend='Aucune dépense notée ce mois';
   else if(top)spend=`Tu as dépensé ${eur(out)} € ce mois, surtout en ${catOf(top[0]).n.toLowerCase()} (${eur(top[1])} €)`;
   else spend=`Tu as dépensé ${eur(out)} € ce mois`;
-  let cls,ic,title,risk;
+  let cls,ic,title,risk,tip='';
   if(dipDay>=0){
     cls='bad';ic='🔴';title='Découvert en vue';
-    const dd=new Date(today.getTime()+dipDay*864e5).toLocaleDateString('fr-FR',{day:'numeric',month:'long'});
-    risk=`risque de <b style="color:var(--red)">découvert vers le ${dd}</b>`;
+    const dipDate=new Date(today.getTime()+dipDay*864e5);
+    const dd=dipDate.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+    const inDays=dipDay===0?"aujourd'hui":dipDay===1?'demain':`dans ${dipDay} jours`;
+    const manque=Math.max(1,Math.round(-minBal));
+    risk=`tu passes <b style="color:var(--red)">sous zéro le ${dd}</b> (${inDays})`;
+    // que faire ? on cherche la plus grosse dépense prévue d'ici le découvert
+    const horizon=new Date(today.getTime()+(dipDay+2)*864e5).toISOString().slice(0,10);
+    const big=(S.planned||[]).filter(p=>p.amount>0&&p.date<=horizon).sort((a,b)=>b.amount-a.amount)[0];
+    const perDay=Math.max(1,Math.ceil(manque/Math.max(1,dipDay)));
+    let conseil=`Il te manquera environ <b>${eur(manque)} €</b>. `;
+    if(big)conseil+=`Reporte ou réduis « ${big.label} » (${eur(big.amount)} €)`;
+    else conseil+=`Rentre <b>${eur(manque)} €</b> avant cette date`;
+    conseil+=dipDay>1?`, ou mets <b>${eur(perDay)} €</b> de côté par jour d'ici là.`:'.';
+    tip=`<div class="atip">💡 ${conseil}</div>`;
   } else if(minBal<150){
     cls='warn';ic='🟠';title='Marge serrée';
-    risk=`pas de découvert prévu mais une marge basse (jusqu'à <b>${eur(Math.max(0,Math.round(minBal)))} €</b>)`;
+    risk=`pas de découvert prévu mais ta marge descend jusqu'à <b>${eur(Math.max(0,Math.round(minBal)))} €</b>`;
+    tip=`<div class="atip">💡 Évite les grosses dépenses non prévues et garde une petite réserve ce mois-ci.</div>`;
   } else {
     cls='good';ic='🟢';title='Tout roule';
     risk='aucun risque de découvert en vue';
   }
   el.className='advice '+cls;
-  el.innerHTML=`<div class="ah"><div class="aic">${ic}</div><div class="at">${title}</div></div><div class="ad">${spend} — ${risk}.</div>`;
+  el.innerHTML=`<div class="ah"><div class="aic">${ic}</div><div class="at">${title}</div></div><div class="ad">${spend} — ${risk}.</div>${tip}`;
 }
 
 // ===== RÉGLAGES =====
