@@ -1163,11 +1163,19 @@ async function fetchGoogleEvents(token){
     const url='https://www.googleapis.com/calendar/v3/calendars/primary/events?'+new URLSearchParams({timeMin:now.toISOString(),timeMax:max.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'50'});
     const r=await fetch(url,{headers:{Authorization:'Bearer '+token}});
     const j=await r.json();
+    if(j.error){
+      const m=(j.error.message||'').toLowerCase();
+      if(r.status===401||m.includes('invalid cred')||m.includes('expired')){gProviderToken=null;toast('🔑','Laissez-passer Google expiré — reconnecte-toi avec Google.');}
+      else if(m.includes('has not been used')||m.includes('disabled')||m.includes('accessnotconfigured')){toast('⚙️','L\'API Google Agenda n\'est pas activée. (voir étape Google Cloud)');}
+      else if(m.includes('scope')||m.includes('insufficient')){toast('🔒','Accès agenda non autorisé — reconnecte-toi avec Google et accepte l\'agenda.');}
+      else toast('📅','Google : '+(j.error.message||'erreur inconnue'));
+      return;
+    }
     if(!j.items){toast('📅','Aucun événement lu.');return}
     const evs=j.items.filter(e=>e.start).map(e=>{const s=(e.start.date||e.start.dateTime||'').slice(0,10);return{key:(e.id||e.summary||'')+'|'+s,summary:e.summary||'Événement',start:s}}).filter(e=>e.start);
     calPending=evs.filter(e=>!S.calProcessed.includes(e.key));updateBell();
     toast('🔔',calPending.length?`${calPending.length} engagement(s) à estimer.`:'Agenda Google à jour ✅');
-  }catch(e){toast('📅','Erreur lecture agenda Google.')}
+  }catch(e){toast('📅','Erreur réseau lecture agenda.')}
 }
 async function checkCalendar(){
   if(!S.icsUrl)return;
