@@ -791,14 +791,14 @@ function openPlanned(){
   $('sheetBody').innerHTML=`<h2>Dépense prévue</h2><div class="lead">Anticipe ce que tu sais devoir payer bientôt, pour un prévisionnel réaliste.</div>
     <div class="field"><label>Quoi ?</label><input id="pLabel" type="text" placeholder="ex : Assurance, cadeau, resto prévu"></div>
     <div class="field"><input id="pAmt" class="amt-in" type="number" inputmode="decimal" placeholder="0 €"></div>
-    <div class="field"><label>Quand ?</label><input id="pDate" type="date" value="${todayStr()}"></div>
+    <div class="field"><label>Quand ?</label><div style="display:flex;gap:8px"><input id="pDate" type="date" value="${todayStr()}" style="flex:1"><input id="pTime" type="time" style="flex:0 0 110px"></div></div>
     <button class="btn btn-pri" onclick="savePlanned()">Ajouter au prévisionnel</button>`;
   openSheet();setTimeout(()=>$('pLabel').focus(),350);
 }
 function savePlanned(){
-  const label=$('pLabel').value.trim(),amt=+$('pAmt').value,date=$('pDate').value||todayStr();
+  const label=$('pLabel').value.trim(),amt=+$('pAmt').value,date=$('pDate').value||todayStr(),time=$('pTime')?$('pTime').value:'';
   if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
-  S.planned.push({id:Date.now(),label:label||'Dépense prévue',amount:amt,date});
+  S.planned.push({id:Date.now(),label:label||'Dépense prévue',amount:amt,date,time});
   save();closeSheet();render();toast('📅','Ajoutée au prévisionnel.');
 }
 function openEditPlanned(id){
@@ -806,13 +806,13 @@ function openEditPlanned(id){
   $('sheetBody').innerHTML=`<h2>Modifier la prévision</h2>
     <div class="field"><label>Quoi ?</label><input id="pLabel" type="text" value="${(p.label||'').replace(/"/g,'&quot;')}"></div>
     <div class="field"><input id="pAmt" class="amt-in" type="number" value="${p.amount}"></div>
-    <div class="field"><label>Quand ?</label><input id="pDate" type="date" value="${p.date}"></div>
+    <div class="field"><label>Quand ?</label><div style="display:flex;gap:8px"><input id="pDate" type="date" value="${p.date}" style="flex:1"><input id="pTime" type="time" value="${p.time||''}" style="flex:0 0 110px"></div></div>
     <button class="btn btn-pri" onclick="saveEditPlanned()" style="margin-bottom:10px">Enregistrer</button>
     <button class="btn btn-red" onclick="deletePlanned()">🗑️ Supprimer</button>
     <button class="btn btn-ghost" onclick="convertPlanned()" style="margin-top:10px">✓ C'est payé → noter la dépense</button>`;
   openSheet();
 }
-function saveEditPlanned(){const p=S.planned.find(x=>x.id===editPlannedId);if(!p)return;const amt=+$('pAmt').value;if(!amt||amt<=0){toast('⚠️','Montant ?');return}p.label=$('pLabel').value.trim()||'Dépense prévue';p.amount=amt;p.date=$('pDate').value||p.date;save();closeSheet();render();toast('✏️','Prévision modifiée.')}
+function saveEditPlanned(){const p=S.planned.find(x=>x.id===editPlannedId);if(!p)return;const amt=+$('pAmt').value;if(!amt||amt<=0){toast('⚠️','Montant ?');return}p.label=$('pLabel').value.trim()||'Dépense prévue';p.amount=amt;p.date=$('pDate').value||p.date;p.time=$('pTime')?$('pTime').value:p.time;save();closeSheet();render();toast('✏️','Prévision modifiée.')}
 function deletePlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;S.planned.splice(i,1);save();closeSheet();render();toast('🗑️','Prévision supprimée.')}
 function convertPlanned(){const i=S.planned.findIndex(x=>x.id===editPlannedId);if(i<0)return;const p=S.planned[i];const gain=p.amount<0;S.tx.unshift({id:Date.now(),date:todayStr(),type:gain?'in':'out',amount:Math.abs(p.amount),cat:gain?'revenu':'autre',note:p.label});S.solde-=p.amount;S.planned.splice(i,1);award(5);bumpStreak();save();closeSheet();render();toast('✅',gain?'Gain encaissé et retiré du prévisionnel.':'Dépense notée et retirée du prévisionnel.')}
 function openCatDetail(cid){
@@ -851,10 +851,11 @@ function deletePiggy(){
   S.tirelire=Math.max(0,S.tirelire-S.piggyLog[i].amount);S.piggyLog.splice(i,1);
   save();render();openPiggyHistory();toast('🗑️','Entrée retirée.');
 }
+const planKey=p=>p.date+'T'+(p.time||'00:00');
 function renderPlanned(){
   const today=todayStr();
-  const list=(S.planned||[]).filter(p=>p.date>=today).sort((a,b)=>a.date<b.date?-1:1);
-  $('plannedList').innerHTML=list.length?list.map(p=>{const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="pdate">${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  const list=(S.planned||[]).filter(p=>p.date>=today).sort((a,b)=>planKey(a)<planKey(b)?-1:1);
+  $('plannedList').innerHTML=list.length?list.map(p=>{const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})">${dateBadge(p.date,p.time)}<div class="info"><div class="n">${p.label}</div><div class="pdate">${d}${p.time?' · '+p.time:''}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
   renderToValidate();
   attachSwipe();
 }
@@ -1037,10 +1038,10 @@ function dateBadge(ds){const dt=new Date(ds);return `<div class="datebadge"><div
 function renderToValidate(){
   const box=$('toValidate');if(!box)return;
   const today=todayStr();
-  const over=(S.planned||[]).filter(p=>p.date<today).sort((a,b)=>a.date<b.date?-1:1);
+  const over=(S.planned||[]).filter(p=>p.date<today).sort((a,b)=>planKey(a)>planKey(b)?-1:1);
   if(!over.length){box.innerHTML='';return}
   box.innerHTML=`<div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">✅ À valider <span style="font-weight:400;color:var(--muted);font-size:12px">· ${over.length} passée(s)</span></div>`
-   +over.map(p=>{const gain=p.amount<0;return `<div class="valid-card">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="vsub">${gain?'gain prévu':'dépense prévue'} · <b style="color:${gain?'var(--green)':'var(--text)'}">${eur(Math.abs(p.amount))} €</b></div></div><div class="vacts"><button class="vbtn no" onclick="dismissPlanned(${p.id})" title="N'a pas eu lieu">✕</button><button class="vbtn yes" onclick="validatePlanned(${p.id})">Valider</button></div></div>`}).join('');
+   +over.map(p=>{const gain=p.amount<0;const dl=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+(p.time?' · '+p.time:'');return `<div class="valid-card">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="vsub">${dl} · <b style="color:${gain?'var(--green)':'var(--text)'}">${eur(Math.abs(p.amount))} €</b></div></div><div class="vacts"><button class="vbtn no" onclick="dismissPlanned(${p.id})" title="N'a pas eu lieu">✕</button><button class="vbtn yes" onclick="validatePlanned(${p.id})">Valider</button></div></div>`}).join('');
 }
 function validatePlanned(id){
   const p=(S.planned||[]).find(x=>x.id===id);if(!p)return;
@@ -1480,7 +1481,7 @@ async function fetchGoogleEvents(token){
       return;
     }
     if(!j.items){toast('📅','Aucun événement lu.');return}
-    const evs=j.items.filter(e=>e.start).map(e=>{const s=(e.start.date||e.start.dateTime||'').slice(0,10);return{key:(e.id||e.summary||'')+'|'+s,summary:e.summary||'Événement',start:s}}).filter(e=>e.start);
+    const evs=j.items.filter(e=>e.start).map(e=>{const dt=e.start.dateTime||e.start.date||'';const s=dt.slice(0,10);const time=e.start.dateTime?dt.slice(11,16):'';return{key:(e.id||e.summary||'')+'|'+s,summary:e.summary||'Événement',start:s,time}}).filter(e=>e.start);
     calPending=evs.filter(e=>!S.calProcessed.includes(e.key));updateBell();
     toast('🔔',calPending.length?`${calPending.length} engagement(s) à estimer.`:'Agenda Google à jour ✅');
   }catch(e){toast('📅','Erreur réseau lecture agenda.')}
@@ -1508,7 +1509,7 @@ function renderSwipeCard(){
   $('sheetBody').innerHTML=`
     <h2>📅 Combien ça va coûter ?</h2>
     <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
-    <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}</div></div>
+    <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}${ev.time?' · '+ev.time:''}</div></div>
     <div class="lead" style="margin-top:6px;font-size:12.5px">Tourne le cadran : <b style="color:var(--red)">🔴 dépense</b> dans un sens, <b style="color:var(--green)">🟢 gain</b> dans l'autre</div>
     <div style="margin-top:10px">${wheelMarkup('calWheel',{min:-1e9,max:1e9,step:5,value:0,perTurn:120,arcMax:300,invert:true,money:true,fmt:v=>v===0?'<small>Gratuit</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:()=>{}})}</div>
     <div class="cal-chips" style="margin-top:10px">${[[0,'Gratuit'],[-10,'−10 €'],[-50,'−50 €'],[-100,'−100 €'],[-500,'−500 €']].map(p=>`<button onclick="setWheel('calWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
@@ -1522,7 +1523,7 @@ function renderSwipeCard(){
 function calAdd(){
   const ev=calPending[calIdx];if(!ev)return;
   const dv=wheelValue('calWheel')||0;            // <0 = dépense, >0 = gain
-  if(dv!==0)S.planned.push({id:Date.now(),label:ev.summary,amount:-dv,date:ev.start});
+  if(dv!==0)S.planned.push({id:Date.now(),label:ev.summary,amount:-dv,date:ev.start,time:ev.time||''});
   S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
   if(dv<0)toast('📅',`${eur(-dv)} € de dépense prévus.`);
   else if(dv>0)toast('💰',`${eur(dv)} € de gain prévus.`);
