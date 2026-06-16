@@ -492,7 +492,7 @@ function save(){localStorage.setItem(KEY,JSON.stringify(S));scheduleCloudSync()}
 function scheduleCloudSync(){if(!sb||!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,1200)}
 async function saveCloud(){if(!sb||!currentUser)return;try{await sb.from('tresor_states').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()})}catch(e){}}
 async function loadCloud(){if(!sb||!currentUser)return null;try{const{data,error}=await sb.from('tresor_states').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)return null;return data?data.data:null}catch(e){return null}}
-function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,showReward:false,showCombats:false,game:{points:0,streak:0,lastDay:null,badges:[]}}}
+function fresh(){return{onboarded:false,solde:0,revFixe:0,chargeFixe:0,budgetVar:0,palier:20,tirelire:0,piggyLog:[],tx:[],debts:[],planned:[],combats:[],actions:[],life:{streak:0,lastDay:null},reward:{project:'',merite:0,threshold:100,unlocked:0},icsUrl:'',calProcessed:[],gClientId:'',soundOn:true,showReward:false,showCombats:false,prevHorizon:30,game:{points:0,streak:0,lastDay:null,badges:[]}}}
 function migrate(){
   if(!S)return;
   if(S.palier===undefined)S.palier=20;
@@ -517,6 +517,7 @@ function migrate(){
   if(S.soundOn===undefined)S.soundOn=true;
   if(S.showReward===undefined)S.showReward=false;
   if(S.showCombats===undefined)S.showCombats=false;
+  if(S.prevHorizon===undefined)S.prevHorizon=30;
 }
 
 const $=id=>document.getElementById(id);
@@ -997,7 +998,7 @@ function renderAdvice(){
   const el=$('advice');if(!el)return;
   const today=new Date();today.setHours(0,0,0,0);
   const dailyFlow=(S.revFixe-S.chargeFixe-S.budgetVar)/30;
-  const days=120,pts=[];let dipDay=-1,minBal=Infinity;
+  const days=S.prevHorizon||30,pts=[];let dipDay=-1,minBal=Infinity;
   for(let d=0;d<=days;d++){
     const ds=new Date(today.getTime()+d*864e5).toISOString().slice(0,10);
     const spent=(S.planned||[]).filter(p=>p.date<=ds).reduce((a,p)=>a+p.amount,0);
@@ -1213,6 +1214,11 @@ function openParams(){
     <div class="param-row"><div><div class="param-k">Combats du mois</div><div class="param-v">Afficher les objectifs perso (musique, sport…) dans le profil</div></div>
       <button class="switch ${S.showCombats?'on':''}" id="swCombats" onclick="toggleCombats()"><span></span></button></div>
 
+    <div class="sec-t" style="margin-top:22px">🔭 Prévisionnel</div>
+    <div class="param-v" style="margin-bottom:6px">Jusqu'où l'app regarde devant pour le solde prévisionnel et l'alerte de découvert.</div>
+    ${wheelMarkup('horizonWheel',{min:7,max:365,step:1,value:S.prevHorizon||30,perTurn:30,arcMax:90,fmt:v=>`${v} <small>jours · ${horizonLabel(v)}</small>`,onChange:v=>{S.prevHorizon=v;clearTimeout(_hzT);_hzT=setTimeout(()=>{save();render();},200);}})}
+    <div class="cal-chips" style="margin-top:10px">${[[7,'1 sem.'],[30,'1 mois'],[90,'3 mois'],[180,'6 mois']].map(p=>`<button onclick="setWheel('horizonWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
+
     <div class="sec-t" style="margin-top:22px">💾 Mes données</div>
     <button class="btn btn-ghost" onclick="exportCSV()" style="margin-bottom:10px">📊 Exporter en tableur (Excel / Numbers)</button>
     <button class="btn btn-ghost" onclick="exportData()" style="margin-bottom:10px">💾 Sauvegarde complète (JSON)</button>
@@ -1221,8 +1227,10 @@ function openParams(){
     <div class="sec-t" style="margin-top:22px">ℹ️ À propos</div>
     <div class="param-row"><div><div class="param-k">Version</div><div class="param-v">Trésor v${APP_VERSION}</div></div></div>
     <div class="hint" style="margin-top:6px">Tes données t'appartiennent : stockées sur ton appareil et dans ton compte privé. Personne d'autre n'y a accès.</div>`;
-  openSheet();
+  openSheet();initWheel('horizonWheel');
 }
+let _hzT=null;
+function horizonLabel(d){if(d>=60)return '≈ '+Math.round(d/30)+' mois';if(d>=14)return '≈ '+Math.round(d/7)+' sem.';return '≈ '+d+' j';}
 function toggleSound(){
   S.soundOn=S.soundOn===false;save();
   const b=$('swSound');if(b)b.classList.toggle('on',S.soundOn);
@@ -1288,12 +1296,13 @@ function render(){
   const m=monthOf(todayStr());
   const inM=S.tx.filter(t=>t.type==='in'&&monthOf(t.date)===m).reduce((a,t)=>a+t.amount,0);
   const outM=S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).reduce((a,t)=>a+t.amount,0);
-  const prevSolde=S.solde-(S.planned||[]).reduce((a,p)=>a+p.amount,0);
+  const H=S.prevHorizon||30;
+  const hDate=new Date();hDate.setHours(0,0,0,0);hDate.setDate(hDate.getDate()+H);
+  const hStr=hDate.toISOString().slice(0,10),tStrH=todayStr();
+  const prevSolde=S.solde-(S.planned||[]).filter(p=>p.date>=tStrH&&p.date<=hStr).reduce((a,p)=>a+p.amount,0);
   $('prevBig').innerHTML=eur(prevSolde)+' €';
   $('prevBig').style.color=prevSolde<0?'var(--red)':'var(--muted)';
-  const futur=(S.planned||[]).map(p=>p.date).filter(d=>d>=todayStr()).sort();
-  const lastD=futur.length?futur[futur.length-1]:null;
-  $('prevDate').textContent=lastD?('au '+new Date(lastD).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})):'';
+  $('prevDate').textContent='au '+hDate.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
 
   // tirelire
   $('piggyAmt').textContent=eur2(S.tirelire)+' €';
