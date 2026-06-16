@@ -231,6 +231,8 @@
   .nav .add{position:relative;background:var(--green);color:#062018;width:54px;height:54px;border-radius:50%;margin-top:-26px;box-shadow:0 8px 24px -6px rgba(52,211,153,.6);justify-content:center;padding:0}
   .navdot{position:absolute;top:9px;right:11px;width:11px;height:11px;border-radius:50%;background:var(--red);border:2px solid var(--green);display:none}
   .navdot.on{display:block}
+  #ptr{position:fixed;top:calc(env(safe-area-inset-top) + 6px);left:50%;transform:translate(-50%,-46px);opacity:0;z-index:70;pointer-events:none;background:var(--card-2);border:1px solid var(--line);border-radius:50px;padding:8px 16px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;box-shadow:0 8px 24px -8px rgba(0,0,0,.6)}
+  #ptr span{display:inline-block;margin-right:4px}
   .nav .add svg{width:26px;height:26px;stroke-width:2.5}
 
   .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:50;opacity:0;pointer-events:none;transition:opacity .3s}
@@ -855,10 +857,12 @@ function deletePiggy(){
   S.tirelire=Math.max(0,S.tirelire-S.piggyLog[i].amount);S.piggyLog.splice(i,1);
   save();render();openPiggyHistory();toast('🗑️','Entrée retirée.');
 }
-const planKey=p=>p.date+'T'+(p.time||'00:00');
+// clé date+heure ; sans heure = fin de journée (23:59) → les rendez-vous datés à l'heure passent avant
+const planKey=p=>p.date+'T'+(p.time||'23:59');
+function nowKey(){const n=new Date(),p=x=>String(x).padStart(2,'0');return `${n.getFullYear()}-${p(n.getMonth()+1)}-${p(n.getDate())}T${p(n.getHours())}:${p(n.getMinutes())}`;}
 function renderPlanned(){
-  const today=todayStr();
-  const list=(S.planned||[]).filter(p=>p.date>=today).sort((a,b)=>planKey(a)<planKey(b)?-1:1);
+  const nk=nowKey();
+  const list=(S.planned||[]).filter(p=>planKey(p)>=nk).sort((a,b)=>planKey(a)<planKey(b)?-1:1);
   $('plannedList').innerHTML=list.length?list.map(p=>{const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});const amtTxt=p.amount===0?'<span style="color:var(--muted)">Gratuit</span>':(p.amount<0?'+'+eur(-p.amount)+' €':eur(p.amount)+' €');return `<div class="swipe-row"><div class="swipe-actions"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="swipe-del" onclick="deletePlannedQuick(${p.id})"><span>🗑️<br>Suppr.</span></div></div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})">${dateBadge(p.date,p.time)}<div class="info"><div class="n">${p.label}</div><div class="pdate">${d}${p.time?' · '+p.time:''}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${amtTxt}</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
   renderToValidate();
   attachSwipe();
@@ -1042,7 +1046,8 @@ function dateBadge(ds){const dt=new Date(ds);return `<div class="datebadge"><div
 function renderToValidate(){
   const box=$('toValidate');if(!box)return;
   const today=todayStr();
-  const over=(S.planned||[]).filter(p=>p.date<today).sort((a,b)=>planKey(a)>planKey(b)?-1:1);
+  const nk=nowKey();
+  const over=(S.planned||[]).filter(p=>planKey(p)<nk).sort((a,b)=>planKey(a)>planKey(b)?-1:1);
   if(!over.length){box.innerHTML='';return}
   box.innerHTML=`<div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">✅ À valider <span style="font-weight:400;color:var(--muted);font-size:12px">· ${over.length} passée(s)</span></div>`
    +over.map(p=>{const gain=p.amount<0;const dl=new Date(p.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+(p.time?' · '+p.time:'');return `<div class="valid-card">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="vsub">${dl} · <b style="color:${gain?'var(--green)':'var(--text)'}">${eur(Math.abs(p.amount))} €</b></div></div><div class="vacts"><button class="vbtn no" onclick="dismissPlanned(${p.id})" title="N'a pas eu lieu">✕</button><button class="vbtn yes" onclick="validatePlanned(${p.id})">Valider</button></div></div>`}).join('');
@@ -1553,15 +1558,21 @@ function deleteDebt(id){
 function attachSwipe(){
   document.querySelectorAll('.swipe-content').forEach(el=>{
     if(el._sw)return;el._sw=true;
-    let x0=0,y0=0,cur=0,drag=null;
+    let x0=0,y0=0,cur=0,base=0,drag=null;
     const acts=el.parentElement&&el.parentElement.querySelector('.swipe-actions,.swipe-del,.swipe-edit');
     const W=acts&&acts.offsetWidth?acts.offsetWidth:84;
-    const set=v=>{cur=v;el.style.transform='translateX('+v+'px)';};
-    el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;drag=null;el.style.transition='none';},{passive:true});
+    const set=v=>{cur=v;el.style.transform='translateX('+v.toFixed(1)+'px)';};
+    el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;base=el._open?-W:0;drag=null;el.style.transition='none';},{passive:true});
     el.addEventListener('touchmove',e=>{const dx=e.touches[0].clientX-x0,dy=e.touches[0].clientY-y0;
-      if(drag===null){if(Math.abs(dx)<6&&Math.abs(dy)<6)return;drag=Math.abs(dx)>Math.abs(dy);}
-      if(!drag)return;const base=el._open?-W:0;set(Math.max(-W,Math.min(0,base+dx)));},{passive:true});
-    el.addEventListener('touchend',()=>{el.style.transition='transform .22s';el._open=cur<-W/2;set(el._open?-W:0);},{passive:true});
+      // verrouillage de direction : il faut un geste horizontal franc pour engager
+      if(drag===null){if(Math.abs(dx)<12&&Math.abs(dy)<12)return;drag=Math.abs(dx)>Math.abs(dy)*1.4;}
+      if(!drag)return;
+      if(e.cancelable)e.preventDefault();
+      let t=base+dx;
+      if(t>0)t*=0.25;                 // résistance vers la droite (fermé)
+      else if(t<-W)t=-W+(t+W)*0.25;   // résistance au-delà de l'ouverture
+      set(t);},{passive:false});
+    el.addEventListener('touchend',()=>{if(drag===null){return;}el.style.transition='transform .28s cubic-bezier(.22,.85,.3,1)';el._open=cur<-W*0.45;set(el._open?-W:0);},{passive:true});
   });
 }
 
@@ -1603,7 +1614,7 @@ async function afterLogin(session){
   if(session.provider_token)gProviderToken=session.provider_token;
   const cloud=await loadCloud();
   if(cloud){S=cloud;migrate();localStorage.setItem(KEY,JSON.stringify(S))}
-  else if(S&&S.onboarded&&confirm('Importer les données présentes sur cet appareil dans ton compte ?')){migrate();saveCloud()}
+  else if(S&&S.onboarded){migrate();saveCloud()} // import auto des données locales, sans demander
   else{S=fresh();saveCloud()}
   if(!S||!S.onboarded){$('onb').classList.remove('hide')}else{$('onb').classList.add('hide');render();startCalendar()}
 }
@@ -1622,6 +1633,36 @@ migrate();
   });
 })();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+
+// Rafraîchit l'écran chaque minute → un rendez-vous qui passe son heure bascule en « À valider »
+setInterval(()=>{if(S&&S.onboarded&&!$('sheet').classList.contains('on'))render();},60000);
+
+// Rafraîchit tout (cloud + agenda)
+async function doRefresh(){
+  try{if(sb&&currentUser){const cloud=await loadCloud();if(cloud){S=cloud;migrate();localStorage.setItem(KEY,JSON.stringify(S));}}}catch(e){}
+  if(gProviderToken)fetchGoogleEvents(gProviderToken);else if(S.icsUrl)checkCalendar();
+  render();toast('🔄','Actualisé.');
+}
+// Tirer vers le bas depuis l'accueil pour tout actualiser
+(function pullToRefresh(){
+  const el=document.createElement('div');el.id='ptr';el.innerHTML='<span>↓</span> Tire pour actualiser';document.body.appendChild(el);
+  let y0=-1,lastD=0,active=false;const TH=72;
+  addEventListener('touchstart',e=>{y0=(window.scrollY<=0)?e.touches[0].clientY:-1;lastD=0;active=false;el.style.transition='none';},{passive:true});
+  addEventListener('touchmove',e=>{
+    if(y0<0||window.scrollY>0)return;
+    const dy=e.touches[0].clientY-y0;if(dy<=0)return;
+    active=true;lastD=Math.min(dy,150);
+    el.style.transform=`translate(-50%,${Math.min(lastD*0.6,60)-46}px)`;el.style.opacity=Math.min(1,lastD/TH);
+    el.firstChild.textContent=lastD>=TH?'↻':'↓';el.lastChild.textContent=lastD>=TH?' Relâche pour actualiser':' Tire pour actualiser';
+  },{passive:true});
+  addEventListener('touchend',()=>{
+    if(!active){y0=-1;return;}
+    el.style.transition='transform .3s,opacity .3s';
+    if(lastD>=TH){el.style.transform='translate(-50%,16px)';el.style.opacity='1';el.firstChild.textContent='↻';el.lastChild.textContent=' Actualisation…';doRefresh().finally(()=>{el.style.transform='';el.style.opacity='0';});}
+    else{el.style.transform='';el.style.opacity='0';}
+    y0=-1;active=false;
+  },{passive:true});
+})();
 </script>
 </body>
 </html>
