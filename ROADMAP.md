@@ -47,8 +47,8 @@ L'esprit du projet : un **ange gardien financier** qui aide à prévoir, rester 
 - [ ] Suivi type Duolingo (streaks)
 
 ## 🟣 Phase 2bis — Fiabilité capture (sans serveur)
-- [ ] **File d'attente offline** pour le micro ET la photo : l'info captée est mise en queue (protégée même sans réseau)
-- [ ] L'IA bosse **en fond** → notification cloche quand le ticket est prêt
+- [x] **File d'attente offline** pour la photo : ticket capté et mis en queue (protégé même sans réseau), réessai auto au retour réseau / pull-to-refresh (micro retiré)
+- [x] L'IA bosse **en fond** → notification (toast + pastille sur l'appareil photo) quand le ticket est prêt à vérifier
 
 ## 🔴 Phase 3 — Cluster « backend » (serveur requis)
 Ces fonctions vont ensemble car elles demandent la même brique (compte + serveur).

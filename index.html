@@ -112,6 +112,8 @@
   .bell svg{width:21px;height:21px;fill:none;stroke:var(--text);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .bell .bdot{position:absolute;top:7px;right:8px;width:9px;height:9px;border-radius:50%;background:var(--red);border:2px solid var(--bg);display:none}
   .bell .bdot.on{display:block}
+  #camTop{position:relative}
+  .camdot{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;border-radius:9px;background:var(--green);color:#06231a;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--bg)}
   .swipe-card{margin-top:14px;border-radius:18px;padding:30px 24px;text-align:center;background:linear-gradient(160deg,#1b2440,#141a30);border:1px solid var(--line-2,rgba(140,160,220,.22))}
   .swipe-card .se{font-size:34px;margin-bottom:10px}
   .swipe-card .st{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin-bottom:6px}
@@ -373,6 +375,7 @@
     <!-- CADRAN CONSEIL -->
     <div class="advice" id="advice"></div>
 
+    <div id="scanInbox"></div>
     <div id="toValidate"></div>
     <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
     <div id="plannedList"></div>
@@ -1326,7 +1329,7 @@ function render(){
   if(lvl>=5&&!hasBadge('lvl5'))giveBadge('lvl5');
   $('badgeGrid').innerHTML=BADGES.map(b=>`<div class="badge ${hasBadge(b.id)?'':'locked'}"><div class="e">${b.e}</div><div class="n">${b.n}</div><div class="d">${b.d}</div></div>`).join('');
 
-  renderCombats();renderReward();renderPlanned();renderAdvice();
+  renderCombats();renderReward();renderPlanned();renderAdvice();renderScanInbox();updateScanBadge();
   const chipBtn=$('combatChip');if(chipBtn)chipBtn.style.display=S.showCombats?'':'none';
   const chip=$('combatChipN');if(chip){const done=(S.combats||[]).filter(id=>actionDoneToday(id)).length;chip.textContent=done+'/'+((S.combats||[]).length||0)}
 }
@@ -1426,21 +1429,73 @@ function fileToResizedBase64(file,maxDim){
     img.onerror=reject;img.src=URL.createObjectURL(file);
   });
 }
+// ===== FILE D'ATTENTE OFFLINE (scan de tickets) =====
+// Le ticket est capté tout de suite, mis en file (protégé même sans réseau),
+// analysé en fond, puis une notif prévient qu'il est prêt à vérifier.
+const SCANQ_KEY='tresor_scanq_v1';
+let scanProcessing=false;
+function loadScanQ(){try{return JSON.parse(localStorage.getItem(SCANQ_KEY)||'[]')}catch(e){return[]}}
+function saveScanQ(q){try{localStorage.setItem(SCANQ_KEY,JSON.stringify(q))}catch(e){}}
 async function handleScan(input){
   const file=input.files&&input.files[0];input.value='';
   if(!file)return;
-  $('sheetBody').innerHTML=`<h2>📸 Analyse du ticket…</h2><div class="lead">Lecture des articles en cours, un instant.</div><div style="text-align:center;padding:34px;font-size:34px">⏳</div>`;openSheet();
   try{
     const {data,mediaType}=await fileToResizedBase64(file,1200);
-    const r=await fetch('/api/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({image:data,mediaType})});
-    const j=await r.json();
-    if(!r.ok){closeSheet();toast('📸',j.error||'Analyse impossible.');return}
-    openScanConfirm(j);
-  }catch(e){closeSheet();toast('📸','Erreur : '+(e.message||e))}
+    const q=loadScanQ();const id=Date.now()+Math.floor(Math.random()*1000);
+    q.push({id,image:data,mediaType,ts:Date.now(),status:'pending'});saveScanQ(q);
+    renderScanInbox();updateScanBadge();
+    if(navigator.onLine){toast('🧾','Ticket reçu — analyse en cours…');processScanQueue(id);}
+    else toast('📴','Hors ligne — ticket gardé. Je l\'analyserai dès le retour du réseau.');
+  }catch(e){toast('📸','Image illisible : '+(e.message||e));}
 }
-let scannedData=null;
-function openScanConfirm(j){
-  scannedData=j;const items=j.items||[];
+async function processScanQueue(autoOpenId){
+  if(scanProcessing||!navigator.onLine)return;
+  scanProcessing=true;
+  try{
+    for(const item of loadScanQ()){
+      if(item.status!=='pending')continue;
+      if(!navigator.onLine)break;
+      try{
+        const r=await fetch('/api/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({image:item.image,mediaType:item.mediaType})});
+        const j=await r.json();
+        const q=loadScanQ(),it=q.find(x=>x.id===item.id);if(!it)continue;
+        if(!r.ok){it.status='error';it.err=j.error||'Analyse impossible';}
+        else{it.status='done';it.result=j;delete it.image;} // libère la photo une fois analysée
+        saveScanQ(q);renderScanInbox();updateScanBadge();
+        if(it.status==='done'){toast('🧾','Ticket prêt à vérifier !');if(item.id===autoOpenId)openScanReview(item.id);}
+      }catch(e){break;} // réseau coupé en cours → on garde « pending », on réessaiera
+    }
+  }finally{scanProcessing=false;}
+}
+function updateScanBadge(){
+  const el=$('camTop');if(!el)return;
+  const n=loadScanQ().filter(x=>x.status==='done'||x.status==='error').length;
+  let dot=el.querySelector('.camdot');
+  if(n>0){if(!dot){dot=document.createElement('span');dot.className='camdot';el.appendChild(dot);}dot.textContent=n;}
+  else if(dot)dot.remove();
+}
+function renderScanInbox(){
+  const box=$('scanInbox');if(!box)return;
+  const q=loadScanQ();
+  const ready=q.filter(x=>x.status==='done'||x.status==='error');
+  const pending=q.filter(x=>x.status==='pending').length;
+  if(!ready.length&&!pending){box.innerHTML='';return}
+  let html=pending?`<div class="hint" style="margin:2px 0 8px">⏳ ${pending} ticket(s) en attente d'analyse…</div>`:'';
+  if(ready.length){
+    html+=`<div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">🧾 Tickets scannés</div>`;
+    html+=ready.map(it=>{
+      if(it.status==='error')return `<div class="valid-card"><div class="datebadge"><div class="dd">⚠️</div></div><div class="info"><div class="n">Ticket illisible</div><div class="vsub">${it.err||'réessaie avec une photo nette'}</div></div><div class="vacts"><button class="vbtn no" onclick="dropScan(${it.id})">✕</button></div></div>`;
+      const j=it.result||{};
+      return `<div class="valid-card"><div class="datebadge"><div class="dd">🧾</div></div><div class="info"><div class="n">${j.merchant||'Ticket'}</div><div class="vsub">${(j.items||[]).length} article(s) · <b>${eur2(j.total||0)} €</b></div></div><div class="vacts"><button class="vbtn no" onclick="dropScan(${it.id})">✕</button><button class="vbtn yes" onclick="openScanReview(${it.id})">Vérifier</button></div></div>`;
+    }).join('');
+  }
+  box.innerHTML=html;
+}
+function dropScan(id){saveScanQ(loadScanQ().filter(x=>x.id!==id));renderScanInbox();updateScanBadge();}
+function openScanReview(id){const it=loadScanQ().find(x=>x.id===id);if(!it||!it.result)return;openScanConfirm(it.result,id);}
+let scannedData=null,scannedQid=null;
+function openScanConfirm(j,qid){
+  scannedData=j;scannedQid=qid||null;const items=j.items||[];
   const rows=items.map(it=>`<div class="tx"><div class="ic">🧾</div><div class="info"><div class="n">${it.label}</div><div class="m">${catOf(guessCat((it.label||'').toLowerCase())).n}</div></div><div class="amt">${eur2(it.price)} €</div></div>`).join('');
   $('sheetBody').innerHTML=`<h2>🧾 Ticket analysé</h2><div class="lead">${j.merchant?j.merchant+' · ':''}${items.length} article(s) · total ${eur2(j.total||0)} €</div>${rows||'<div class="empty">Aucun article détecté. Réessaie avec une photo plus nette.</div>'}
     ${items.length?`<button class="btn btn-pri" onclick="addScanned('detail')" style="margin:14px 0 10px">Ajouter le détail (${items.length} dépenses)</button>`:''}
@@ -1454,6 +1509,7 @@ function addScanned(mode){
   }else{
     const t=scannedData.total||0;S.tx.unshift({id:Date.now(),date,type:'out',amount:t,cat:'courses',note:scannedData.merchant||'Ticket'});S.solde-=t;award(5);
   }
+  if(scannedQid){dropScan(scannedQid);scannedQid=null;}
   bumpStreak();save();closeSheet();render();toast('🧾','Dépenses du ticket ajoutées !');
 }
 
@@ -1660,8 +1716,11 @@ setInterval(()=>{if(S&&S.onboarded&&!$('sheet').classList.contains('on'))render(
 async function doRefresh(){
   try{if(sb&&currentUser){const cloud=await loadCloud();if(cloud){S=cloud;migrate();localStorage.setItem(KEY,JSON.stringify(S));}}}catch(e){}
   if(gProviderToken)fetchGoogleEvents(gProviderToken);else if(S.icsUrl)checkCalendar();
+  processScanQueue();
   render();toast('🔄','Actualisé.');
 }
+addEventListener('online',()=>processScanQueue());
+setTimeout(()=>processScanQueue(),1500);
 // Tirer vers le bas depuis l'accueil pour tout actualiser
 (function pullToRefresh(){
   const el=document.createElement('div');el.id='ptr';el.innerHTML='<span>↓</span> Tire pour actualiser';document.body.appendChild(el);
