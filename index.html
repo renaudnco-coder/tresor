@@ -265,9 +265,19 @@
   .wc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}
   .wc-leg i.dsh{background:none!important;border-top:3px dotted var(--violet);height:0}
   .uncat-card{background:var(--card);border:1px solid rgba(245,180,60,.3);border-radius:16px;padding:14px;margin-bottom:12px}
-  .uncat-card .uh{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+  .uncat-card .uh{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .uncat-card .ul{font-weight:600;font-size:15px}
-  .uncat-card .ua{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:16px;color:var(--red)}
+  .datebadge{flex:0 0 46px;width:46px;height:46px;border-radius:12px;background:var(--card-2);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+  .datebadge .dd{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px}
+  .datebadge .mm{font-size:10px;color:var(--muted);text-transform:lowercase;margin-top:2px}
+  .valid-card{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid rgba(52,211,153,.28);border-radius:16px;padding:12px;margin-bottom:10px}
+  .valid-card .info{flex:1;min-width:0}
+  .valid-card .n{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .valid-card .vsub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .vacts{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .vbtn{border:none;border-radius:10px;font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif;padding:9px 13px}
+  .vbtn.yes{background:var(--green);color:#06231a}
+  .vbtn.no{background:var(--card-2);color:var(--muted);padding:9px 11px}
   .pick-debt{display:flex;align-items:center;gap:12px;padding:14px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:8px;cursor:pointer}
   .pick-debt.on{border-color:var(--violet)}
   .pick-debt .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--blue));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:14px}
@@ -361,6 +371,7 @@
 
     <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
     <div id="plannedList"></div>
+    <div id="toValidate"></div>
 
     <!-- TIRELIRE -->
     <div class="piggy">
@@ -842,8 +853,9 @@ function deletePiggy(){
 }
 function renderPlanned(){
   const today=todayStr();
-  const list=(S.planned||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
-  $('plannedList').innerHTML=list.length?list.map(p=>{const past=p.date<today;const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})" style="${past?'opacity:.6':''}"><div class="ic">📅</div><div class="info"><div class="n">${p.label}</div><div class="pdate">${past?'⚠️ à régulariser · ':''}${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  const list=(S.planned||[]).filter(p=>p.date>=today).sort((a,b)=>a.date<b.date?-1:1);
+  $('plannedList').innerHTML=list.length?list.map(p=>{const d=new Date(p.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'long'});return `<div class="swipe-row"><div class="swipe-edit" onclick="openEditPlanned(${p.id})">Modifier</div><div class="tx swipe-content" onclick="openEditPlanned(${p.id})">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="pdate">${d}</div></div><div class="amt"${p.amount<0?' style="color:var(--green)"':''}>${p.amount<0?'+'+eur(-p.amount):eur(p.amount)} €</div></div></div>`}).join(''):'<div class="empty" style="padding:18px">Rien de prévu.<br>Ajoute ce que tu sais devoir payer bientôt.</div>';
+  renderToValidate();
   attachSwipe();
 }
 
@@ -1019,29 +1031,56 @@ function renderAdvice(){
 }
 
 // Une dépense prévue dont la date est passée et non validée → comptabilisée automatiquement
-function autoCountOverdue(){
-  const today=todayStr();let changed=false;
-  (S.planned||[]).slice().forEach(p=>{
-    if(p.date>=today)return;
-    const nid=Date.now()+Math.floor(Math.random()*100000);
-    if(p.amount<0){S.tx.unshift({id:nid,date:p.date,type:'in',amount:-p.amount,cat:'revenu',note:p.label||'Revenu'});S.solde-=p.amount;}
-    else if(p.amount>0){S.tx.unshift({id:nid,date:p.date,type:'out',amount:p.amount,cat:'autre',note:p.label||'Dépense',needsCat:true,fromCal:true});S.solde-=p.amount;}
-    S.planned=S.planned.filter(x=>x.id!==p.id);changed=true;
-  });
-  if(changed)save();
+// Pastille de date (gros jour + petit mois) à la place du logo calendrier
+function dateBadge(ds){const dt=new Date(ds);return `<div class="datebadge"><div class="dd">${dt.getDate()}</div><div class="mm">${dt.toLocaleDateString('fr-FR',{month:'short'}).replace('.','')}</div></div>`;}
+// Box « À valider » : dépenses prévues dont la date est passée → à confirmer comme réelles
+function renderToValidate(){
+  const box=$('toValidate');if(!box)return;
+  const today=todayStr();
+  const over=(S.planned||[]).filter(p=>p.date<today).sort((a,b)=>a.date<b.date?-1:1);
+  if(!over.length){box.innerHTML='';return}
+  box.innerHTML=`<div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">✅ À valider <span style="font-weight:400;color:var(--muted);font-size:12px">· ${over.length} passée(s)</span></div>`
+   +over.map(p=>{const gain=p.amount<0;return `<div class="valid-card">${dateBadge(p.date)}<div class="info"><div class="n">${p.label}</div><div class="vsub">${gain?'gain prévu':'dépense prévue'} · <b style="color:${gain?'var(--green)':'var(--text)'}">${eur(Math.abs(p.amount))} €</b></div></div><div class="vacts"><button class="vbtn no" onclick="dismissPlanned(${p.id})" title="N'a pas eu lieu">✕</button><button class="vbtn yes" onclick="validatePlanned(${p.id})">Valider</button></div></div>`}).join('');
 }
-// Catégorisation ludique des dépenses venues de l'agenda (même grille que « Ajouter un mouvement »)
+function validatePlanned(id){
+  const p=(S.planned||[]).find(x=>x.id===id);if(!p)return;
+  const nid=Date.now()+Math.floor(Math.random()*100000);
+  if(p.amount<0){S.tx.unshift({id:nid,date:p.date,type:'in',amount:-p.amount,cat:'revenu',note:p.label||'Revenu'});S.solde-=p.amount;}
+  else{S.tx.unshift({id:nid,date:p.date,type:'out',amount:p.amount,cat:'autre',note:p.label||'Dépense',needsCat:true});S.solde-=p.amount;}
+  S.planned=(S.planned||[]).filter(x=>x.id!==id);save();render();
+  toast('✅',p.amount<0?'Gain encaissé.':'Dépense validée — classe-la dans Analyse 🏷️');
+}
+function dismissPlanned(id){
+  if(!confirm('Cette dépense prévue n\'a pas eu lieu ? On la retire.'))return;
+  S.planned=(S.planned||[]).filter(x=>x.id!==id);save();render();toast('🗑️','Retirée du prévisionnel.');
+}
+// Box catégorisation (Analyse) : même base que « Ajouter un mouvement » mais avec la roulette (pas de 1 €, bidirectionnelle)
+let uncatPickCat=null;
 function renderUncat(){
   const box=$('uncatBox');if(!box)return;
   const items=S.tx.filter(t=>t.needsCat);
-  if(!items.length){box.innerHTML='';return}
-  box.innerHTML=`<div class="sec-t">📥 À catégoriser <span style="font-weight:400;color:var(--muted);font-size:12px">· ${items.length} depuis ton agenda</span></div>`
-    +items.map(t=>`<div class="uncat-card"><div class="uh"><div class="ul">📅 ${t.note}</div><div class="ua">${eur(t.amount)} €</div></div><div class="cats" style="margin-bottom:0">${CATS.map(c=>`<div class="cat" onclick="assignCat(${t.id},'${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}</div></div>`).join('');
+  if(!items.length){box.innerHTML='';uncatPickCat=null;return}
+  const t=items[0];
+  box.innerHTML=`<div class="sec-t">🏷️ À catégoriser <span style="font-weight:400;color:var(--muted);font-size:12px">· ${items.length} restante(s)</span></div>
+    <div class="uncat-card">
+      <div class="uh">${dateBadge(t.date)}<div class="ul" style="flex:1">${t.note}</div></div>
+      <div style="margin:4px 0 2px">${wheelMarkup('uncatWheel',{min:-1e9,max:1e9,step:1,value:-(t.amount),perTurn:60,arcMax:200,invert:true,money:true,fmt:v=>v===0?'<small>0 €</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:()=>{}})}</div>
+      <div class="hint" style="text-align:center;margin-bottom:8px">Tourne pour ajuster · 🔴 dépense / 🟢 gain</div>
+      <div class="cats" style="margin-bottom:10px">${CATS.map(c=>`<div class="cat ${uncatPickCat===c.id?'on':''}" onclick="pickUncatCat('${c.id}',this)"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}</div>
+      <button class="btn btn-pri" onclick="validateUncat(${t.id})">Valider la catégorie</button>
+    </div>`;
+  initWheel('uncatWheel');
 }
-function assignCat(id,cid){
+function pickUncatCat(cid,el){uncatPickCat=cid;const box=$('uncatBox');if(box)box.querySelectorAll('.cat').forEach(x=>x.classList.toggle('on',x===el));}
+function validateUncat(id){
   const t=S.tx.find(x=>x.id===id);if(!t)return;
-  t.cat=cid;delete t.needsCat;delete t.fromCal;save();render();
-  toast(catOf(cid).e,`Classé en ${catOf(cid).n} 🎉`);
+  const v=wheelValue('uncatWheel'),gain=v>0,amt=Math.abs(v)||t.amount;
+  if(!gain&&!uncatPickCat){toast('🏷️','Choisis une catégorie.');return}
+  const oldSigned=t.type==='in'?t.amount:-t.amount,newSigned=gain?amt:-amt;
+  S.solde+=(newSigned-oldSigned);
+  t.amount=amt;t.type=gain?'in':'out';t.cat=gain?'revenu':uncatPickCat;
+  delete t.needsCat;uncatPickCat=null;save();render();
+  toast('✅',gain?'Classé en revenu 🎉':`Classé en ${catOf(t.cat).n} 🎉`);
 }
 // Graphique : solde réel (trait plein) jusqu'à aujourd'hui + prévisionnel (pointillés) ensuite
 let chartMode='month';
@@ -1229,7 +1268,6 @@ function confetti(){const cols=['#34D399','#60A5FA','#A78BFA','#FFCB6B','#F87171
 
 // ===== RENDER =====
 function render(){
-  autoCountOverdue();
   const pts=S.game.points,lvl=levelOf(pts),prog=pts%100;
   $('lvlNum').textContent=lvl;$('lvlName').textContent=LVLNAMES[Math.min(lvl-1,5)];$('lvlPts').textContent=pts+' pts';$('lvlRing').style.setProperty('--p',prog+'%');
   $('dateLbl').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
