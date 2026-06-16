@@ -373,9 +373,9 @@
     <!-- CADRAN CONSEIL -->
     <div class="advice" id="advice"></div>
 
+    <div id="toValidate"></div>
     <div class="sec-t" style="text-transform:none;letter-spacing:0;font-size:15px;font-weight:600">📅 Dépenses prévues <button onclick="openPlanned()" style="background:none;border:none;color:var(--green);font-weight:600;font-size:13px;cursor:pointer;font-family:'Inter',sans-serif">+ Ajouter</button></div>
     <div id="plannedList"></div>
-    <div id="toValidate"></div>
 
     <!-- TIRELIRE -->
     <div class="piggy">
@@ -645,17 +645,17 @@ function openAdd(){
       <button id="tg-out" class="on out" onclick="setType('out')">– Dépense</button>
       <button id="tg-in" onclick="setType('in')">+ Revenu</button>
     </div>
-    <div class="field"><input id="addAmt" class="amt-in" type="number" inputmode="decimal" placeholder="0 €"></div>
-    <div id="catWrap"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie</label><div class="cats" id="catGrid"></div></div>
+    ${wheelMarkup('addWheel',{min:0,step:1,value:0,perTurn:60,arcMax:200,money:true,fmt:v=>v>0?(eur(v)+' <small>€</small>'):'<small>0 €</small>',onChange:()=>{}})}
+    <div id="catWrap" style="margin-top:14px"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie</label><div class="cats" id="catGrid"></div></div>
     <div class="field"><input id="addNote" type="text" placeholder="Note (ex : Frais BNP)"></div>
     <button class="btn btn-pri" onclick="saveTx()">Enregistrer</button>`;
-  renderCats();openSheet();setTimeout(()=>$('addAmt').focus(),350);
+  renderCats();openSheet();initWheel('addWheel');
 }
 function setType(t){addType=t;$('tg-out').className=t==='out'?'on out':'';$('tg-in').className=t==='in'?'on in':'';$('catWrap').style.display=t==='out'?'block':'none'}
 function renderCats(){$('catGrid').innerHTML=CATS.map(c=>`<div class="cat ${c.id===addCat?'on':''}" onclick="pickCat('${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}
 function pickCat(id){addCat=id;renderCats()}
 function saveTx(){
-  const amt=+$('addAmt').value;if(!amt||amt<=0){toast('⚠️','Entre un montant.');return}
+  const amt=wheelValue('addWheel');if(!amt||amt<=0){toast('⚠️','Tourne la roulette pour entrer un montant.');return}
   S.tx.unshift({id:Date.now(),date:todayStr(),type:addType,amount:amt,cat:addType==='out'?addCat:'revenu',note:$('addNote').value.trim()});
   S.solde+=addType==='in'?amt:-amt;award(addType==='out'?5:3);bumpStreak();
   if(!hasBadge('first'))giveBadge('first');save();closeSheet();render();
@@ -1065,32 +1065,31 @@ function dismissPlanned(id){
   S.planned=(S.planned||[]).filter(x=>x.id!==id);save();render();toast('🗑️','Retirée du prévisionnel.');
 }
 // Box catégorisation (Analyse) : même base que « Ajouter un mouvement » mais avec la roulette (pas de 1 €, bidirectionnelle)
-let uncatPickCat=null;
 function renderUncat(){
   const box=$('uncatBox');if(!box)return;
-  const items=S.tx.filter(t=>t.needsCat);
-  if(!items.length){box.innerHTML='';uncatPickCat=null;return}
+  const items=S.tx.filter(t=>t.needsCat).sort((a,b)=>(a._defer||0)-(b._defer||0));
+  if(!items.length){box.innerHTML='';return}
   const t=items[0];
+  const dl=new Date(t.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
   box.innerHTML=`<div class="sec-t">🏷️ À catégoriser <span style="font-weight:400;color:var(--muted);font-size:12px">· ${items.length} restante(s)</span></div>
-    <div class="uncat-card">
-      <div class="uh">${dateBadge(t.date)}<div class="ul" style="flex:1">${t.note}</div></div>
-      <div style="margin:4px 0 2px">${wheelMarkup('uncatWheel',{min:-1e9,max:1e9,step:1,value:-(t.amount),perTurn:60,arcMax:200,invert:true,money:true,fmt:v=>v===0?'<small>0 €</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:()=>{}})}</div>
-      <div class="hint" style="text-align:center;margin-bottom:8px">Tourne pour ajuster · 🔴 dépense / 🟢 gain</div>
-      <div class="cats" style="margin-bottom:10px">${CATS.map(c=>`<div class="cat ${uncatPickCat===c.id?'on':''}" onclick="pickUncatCat('${c.id}',this)"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}</div>
-      <button class="btn btn-pri" onclick="validateUncat(${t.id})">Valider la catégorie</button>
+    <div class="uncat-card" id="uncatCard">
+      <div class="uh">${dateBadge(t.date,t.time)}<div style="flex:1;min-width:0"><div class="ul">${t.note}</div><div class="param-v">${dl} · ${eur(t.amount)} €</div></div></div>
+      <div class="cats" style="margin:8px 0 8px">${CATS.map(c=>`<div class="cat" onclick="assignCat(${t.id},'${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}</div>
+      <button class="btn btn-ghost" onclick="deferUncat(${t.id})">⏭ Classer plus tard</button>
+      <div class="hint" style="text-align:center;margin-top:6px">Touche une catégorie · ou glisse la carte pour plus tard</div>
     </div>`;
-  initWheel('uncatWheel');
+  attachUncatSwipe(t.id);
 }
-function pickUncatCat(cid,el){uncatPickCat=cid;const box=$('uncatBox');if(box)box.querySelectorAll('.cat').forEach(x=>x.classList.toggle('on',x===el));}
-function validateUncat(id){
-  const t=S.tx.find(x=>x.id===id);if(!t)return;
-  const v=wheelValue('uncatWheel'),gain=v>0,amt=Math.abs(v)||t.amount;
-  if(!gain&&!uncatPickCat){toast('🏷️','Choisis une catégorie.');return}
-  const oldSigned=t.type==='in'?t.amount:-t.amount,newSigned=gain?amt:-amt;
-  S.solde+=(newSigned-oldSigned);
-  t.amount=amt;t.type=gain?'in':'out';t.cat=gain?'revenu':uncatPickCat;
-  delete t.needsCat;uncatPickCat=null;save();render();
-  toast('✅',gain?'Classé en revenu 🎉':`Classé en ${catOf(t.cat).n} 🎉`);
+function assignCat(id,cid){const t=S.tx.find(x=>x.id===id);if(!t)return;t.cat=cid;delete t.needsCat;delete t._defer;save();render();toast(catOf(cid).e,`Classé en ${catOf(cid).n} 🎉`);}
+function deferUncat(id){const t=S.tx.find(x=>x.id===id);if(!t)return;t._defer=Date.now();save();renderUncat();toast('⏭','Gardé en attente.');}
+function attachUncatSwipe(id){
+  const el=$('uncatCard');if(!el)return;let x0=0,y0=0,dx=0,dy=0,moved=false;
+  el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;dx=dy=0;moved=false;el.style.transition='none';},{passive:true});
+  el.addEventListener('touchmove',e=>{dx=e.touches[0].clientX-x0;dy=e.touches[0].clientY-y0;if(Math.abs(dx)<8&&Math.abs(dy)<8)return;moved=true;el.style.transform=`translate(${dx.toFixed(0)}px,${Math.max(0,dy).toFixed(0)}px)`;el.style.opacity=Math.max(.3,1-Math.max(Math.abs(dx),Math.abs(dy))/220);},{passive:true});
+  el.addEventListener('touchend',()=>{if(!moved)return;el.style.transition='transform .25s ease,opacity .25s';
+    if(Math.max(Math.abs(dx),Math.abs(dy))>=70){const ox=dx<-60?-400:(dx>60?400:0),oy=dy>60?420:0;el.style.transform=`translate(${ox}px,${oy}px)`;el.style.opacity='0';setTimeout(()=>deferUncat(id),190);}
+    else{el.style.transform='';el.style.opacity='1';}
+  },{passive:true});
 }
 // Graphique : solde réel (trait plein) jusqu'à aujourd'hui + prévisionnel (pointillés) ensuite
 let chartMode='month';
@@ -1410,7 +1409,7 @@ function parseVoice(txt){
   if(amt>0)toast('🎤',`Compris : ${eur2(amt)} € — ${note}. Vérifie et valide !`);
   else toast('🎤','Je n\'ai pas saisi le montant, complète-le.');
 }
-function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)$('addAmt').value=amt;$('addNote').value=note||'';},80)}
+function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)setWheel('addWheel',amt);$('addNote').value=note||'';},120)}
 
 // ===== SCAN DE TICKET (photo → Claude vision) =====
 function fileToResizedBase64(file,maxDim){
