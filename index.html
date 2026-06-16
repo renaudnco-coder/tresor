@@ -1248,7 +1248,8 @@ async function deleteAccount(){
 }
 
 // ===== NAV / SHEET / TOAST =====
-function go(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));$('v-'+v).classList.add('on');['accueil','analyse','dettes','profil'].forEach(n=>{const b=$('nav-'+n);if(b)b.classList.toggle('on',n===v)});window.scrollTo(0,0)}
+let currentView='accueil';
+function go(v){currentView=v;document.querySelectorAll('.view').forEach(x=>x.classList.remove('on'));$('v-'+v).classList.add('on');['accueil','analyse','dettes','profil'].forEach(n=>{const b=$('nav-'+n);if(b)b.classList.toggle('on',n===v)});window.scrollTo(0,0)}
 function openSheet(){const s=$('sheet');s.style.transition='';s.style.transform='';s.scrollTop=0;initSheetSwipe();$('sheetBg').classList.add('on');s.classList.add('on')}
 function closeSheet(){$('sheetBg').classList.remove('on');const s=$('sheet');s.style.transition='';s.classList.remove('on');s.style.transform='';}
 // Glisser vers le bas pour fermer n'importe quelle fiche (façon iOS)
@@ -1508,15 +1509,15 @@ function updateBell(){const d=$('bellDot');if(d)d.classList.toggle('on',calPendi
 function onBell(){
   if(!gProviderToken&&!S.icsUrl&&!S.gClientId){toast('📅','Connecte-toi avec Google (ou ajoute un lien iCal) pour ton agenda.');return}
   if(!calPending.length){if(gProviderToken)fetchGoogleEvents(gProviderToken);else if(S.gClientId)gConnect('');else checkCalendar();toast('🔔','Je vérifie ton agenda…');return}
-  calIdx=0;renderSwipeCard();openSheet();
+  renderSwipeCard();openSheet();
 }
 function renderSwipeCard(){
-  const ev=calPending[calIdx];
+  const ev=calPending[0];
   if(!ev){updateBell();closeSheet();toast('📅','Prévisions à jour ! 🎉');return}
   const d=new Date(ev.start).toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
   $('sheetBody').innerHTML=`
     <h2>📅 Combien ça va coûter ?</h2>
-    <div class="lead">${calIdx+1}/${calPending.length} · fais tourner la molette pour estimer</div>
+    <div class="lead">${calPending.length} à estimer · fais tourner la molette</div>
     <div class="swipe-card"><div class="se">📌</div><div class="st">${ev.summary}</div><div class="sd">${d}${ev.time?' · '+ev.time:''}</div></div>
     <div class="lead" style="margin-top:6px;font-size:12.5px">Tourne le cadran : <b style="color:var(--red)">🔴 dépense</b> dans un sens, <b style="color:var(--green)">🟢 gain</b> dans l'autre</div>
     <div style="margin-top:10px">${wheelMarkup('calWheel',{min:-1e9,max:1e9,step:5,value:0,perTurn:120,arcMax:300,invert:true,money:true,fmt:v=>v===0?'<small>Gratuit</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:()=>{}})}</div>
@@ -1529,22 +1530,22 @@ function renderSwipeCard(){
   initWheel('calWheel');
 }
 function calAdd(){
-  const ev=calPending[calIdx];if(!ev)return;
+  const ev=calPending[0];if(!ev)return;
   const dv=wheelValue('calWheel')||0;            // <0 = dépense, >0 = gain
   if(dv!==0)S.planned.push({id:Date.now(),label:ev.summary,amount:-dv,date:ev.start,time:ev.time||''});
-  S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
+  S.calProcessed.push(ev.key);calPending.shift();save();render();updateBell();renderSwipeCard();
   if(dv<0)toast('📅',`${eur(-dv)} € de dépense prévus.`);
   else if(dv>0)toast('💰',`${eur(dv)} € de gain prévus.`);
 }
 function calSkip(){
-  const ev=calPending[calIdx];if(!ev)return;
-  S.calProcessed.push(ev.key);calIdx++;save();render();renderSwipeCard();
+  const ev=calPending[0];if(!ev)return;
+  S.calProcessed.push(ev.key);calPending.shift();save();render();updateBell();renderSwipeCard();
 }
-// « Plus tard » : on passe à l'événement suivant SANS marquer celui-ci → il reviendra
+// « Plus tard » : l'événement repart en fin de file (reste dans la cloche, ne disparaît pas)
 function calLater(){
-  if(!calPending[calIdx])return;
-  calIdx++;
-  if(calIdx>=calPending.length){closeSheet();toast('⏰','Gardé pour plus tard. La cloche te le rappellera.');return}
+  if(!calPending.length)return;
+  calPending.push(calPending.shift());updateBell();
+  if(calPending.length<=1){closeSheet();toast('⏰','Gardé pour plus tard. La cloche te le rappellera.');return}
   renderSwipeCard();
 }
 // Suppression d'un silo / projet par glissement vers la gauche (façon iPhone)
@@ -1632,6 +1633,25 @@ migrate();
   });
 })();
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+
+// Glisser à gauche/droite depuis le BAS de l'écran → changer d'onglet
+(function tabSwipe(){
+  const VIEWS=['accueil','analyse','dettes','profil'];
+  let x0=0,y0=0,active=false;
+  addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    active=t.clientY>innerHeight-95 && !$('sheet').classList.contains('on') && !(e.target.closest&&e.target.closest('.swipe-content,.dial,.silos'));
+    x0=t.clientX;y0=t.clientY;
+  },{passive:true});
+  addEventListener('touchend',e=>{
+    if(!active)return;active=false;
+    const t=e.changedTouches[0],dx=t.clientX-x0,dy=t.clientY-y0;
+    if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)*1.7){
+      const i=VIEWS.indexOf(currentView),ni=i+(dx<0?1:-1);
+      if(ni>=0&&ni<VIEWS.length)go(VIEWS[ni]);
+    }
+  },{passive:true});
+})();
 
 // Rafraîchit l'écran chaque minute → un rendez-vous qui passe son heure bascule en « À valider »
 setInterval(()=>{if(S&&S.onboarded&&!$('sheet').classList.contains('on'))render();},60000);
