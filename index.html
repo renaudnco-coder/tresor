@@ -661,6 +661,7 @@ function openAdd(){
     ${wheelMarkup('addWheel',{min:-1e9,max:1e9,step:1,value:0,perTurn:60,arcMax:200,invert:true,money:true,fmt:v=>v===0?'<small>0 €</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:v=>{const cw=$('catWrap');if(cw)cw.style.display=v>0?'none':'block';}})}
     <div id="catWrap" style="margin-top:14px"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie (dépense)</label><div class="cats" id="catGrid"></div></div>
     <div class="field"><input id="addNote" type="text" placeholder="Note (ex : Frais BNP)"></div>
+    <div class="field"><label>Date <span style="color:var(--muted);font-weight:400">— vide = maintenant · une date future = prévision</span></label><div style="display:flex;gap:8px"><input id="addDate" type="date" style="flex:1"><input id="addTime" type="time" style="flex:0 0 110px"></div></div>
     <button class="btn btn-pri" onclick="saveTx()">Enregistrer</button>`;
   renderCats();openSheet();initWheel('addWheel');
 }
@@ -668,8 +669,13 @@ function renderCats(){$('catGrid').innerHTML=CATS.map(c=>`<div class="cat ${c.id
 function pickCat(id){addCat=id;renderCats()}
 function saveTx(){
   const v=wheelValue('addWheel');if(!v){toast('⚠️','Tourne la molette pour entrer un montant.');return}
-  const out=v<0,amt=Math.abs(v);
-  S.tx.unshift({id:Date.now(),date:todayStr(),type:out?'out':'in',amount:amt,cat:out?addCat:'revenu',note:$('addNote').value.trim()});
+  const out=v<0,amt=Math.abs(v),note=$('addNote').value.trim();
+  const dateV=$('addDate')?$('addDate').value:'',timeV=$('addTime')?$('addTime').value:'';
+  if(dateV&&dateV>todayStr()){ // date future → prévision (pas un mouvement immédiat)
+    S.planned.push({id:Date.now(),label:note||(out?catOf(addCat).n:'Revenu'),amount:out?amt:-amt,date:dateV,time:timeV});
+    save();closeSheet();render();toast('📅',out?'Dépense prévue ajoutée.':'Revenu prévu ajouté.');return;
+  }
+  S.tx.unshift({id:Date.now(),date:dateV||todayStr(),type:out?'out':'in',amount:amt,cat:out?addCat:'revenu',note});
   S.solde+=out?-amt:amt;award(out?5:3);bumpStreak();
   if(!hasBadge('first'))giveBadge('first');save();closeSheet();render();
   toast(out?'✅':'💰',out?'Dépense notée. +5 pts':'Revenu ajouté. +3 pts');
@@ -1136,7 +1142,10 @@ function renderBalanceChart(){
     pts.push({i,ds,day,bal,future:ds>tStr});
   }
   const vals=pts.map(p=>p.bal);
-  let ymin=Math.min(...vals,0),ymax=Math.max(...vals,0);if(ymin===ymax)ymax+=100;
+  // l'échelle s'adapte au solde réel (on n'inclut 0 que si un découvert est possible)
+  let ymin=Math.min(...vals),ymax=Math.max(...vals);
+  if(vals.some(v=>v<0))ymin=Math.min(ymin,0);
+  if(ymin===ymax){ymin-=50;ymax+=50;}
   const pad=(ymax-ymin)*0.15||50;ymin-=pad;ymax+=pad;
   const W=340,Hh=212,pL=14,pR=14,pT=24,pB=26,pw=W-pL-pR,ph=Hh-pT-pB;
   const X=i=>pL+(n<=1?0:i/(n-1)*pw),Y=v=>pT+(1-(v-ymin)/(ymax-ymin))*ph;
@@ -1358,7 +1367,9 @@ function render(){
   // analyse silos
   renderBalanceChart();renderUncat();
   $('anaSpent').innerHTML=eur(outM)+'<small> €</small>';
-  $('anaSub').textContent=S.budgetVar>0?`sur ${eur(S.budgetVar)} € de budget visé`:'—';
+  const upN=(S.planned||[]).filter(p=>p.date>=todayStr()&&p.amount>0).length;
+  const upSum=(S.planned||[]).filter(p=>p.date>=todayStr()&&p.amount>0).reduce((a,p)=>a+p.amount,0);
+  $('anaSub').innerHTML=[S.budgetVar>0?`sur ${eur(S.budgetVar)} € de budget`:'',upN?`<span style="color:var(--amber)">${upN} dépense(s) à venir · ${eur(upSum)} €</span>`:''].filter(Boolean).join(' · ')||'—';
   const byCat={};S.tx.filter(t=>t.type==='out'&&monthOf(t.date)===m).forEach(t=>{byCat[t.cat]=(byCat[t.cat]||0)+t.amount});
   const entries=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
   const maxRef=S.budgetVar>0?S.budgetVar:(entries[0]?entries[0][1]:1);
