@@ -270,6 +270,14 @@
   .wc-leg span{display:flex;align-items:center;gap:6px}
   .wc-leg i{width:16px;height:3px;border-radius:2px;display:inline-block}
   .wc-leg i.dsh{background:none!important;border-top:3px dotted var(--violet);height:0}
+  #chartTip{position:fixed;z-index:80;display:none;background:rgba(28,34,46,.97);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(140,160,220,.28);border-radius:15px;padding:12px 14px;min-width:172px;max-width:250px;box-shadow:0 18px 44px -10px rgba(0,0,0,.75);opacity:0;transform:translateY(8px) scale(.97);transition:opacity .18s ease,transform .18s cubic-bezier(.2,.9,.3,1);pointer-events:none}
+  #chartTip.on{opacity:1;transform:translateY(0) scale(1)}
+  #chartTip .cth{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;text-transform:capitalize;margin-bottom:9px}
+  #chartTip .ctrow{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;margin:5px 0}
+  #chartTip .ctn{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #chartTip .cta{font-family:'Space Grotesk',sans-serif;font-weight:600;flex:0 0 auto}
+  #chartTip .ctb{margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+  #chartTip .ctb b{color:var(--text)}
   .uncat-card{background:var(--card);border:1px solid rgba(245,180,60,.3);border-radius:16px;padding:14px;margin-bottom:12px}
   .uncat-card .uh{display:flex;align-items:center;gap:12px;margin-bottom:8px}
   .uncat-card .ul{font-weight:600;font-size:15px}
@@ -574,6 +582,7 @@ function initWheel(id){
   host.innerHTML=`<svg viewBox="0 0 240 240" class="dial-svg"><defs>`
     +`<linearGradient id="dgp-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#b14fc8"/><stop offset="1" stop-color="#ff5a98"/></linearGradient>`
     +`<linearGradient id="dgg-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22b88a"/><stop offset="1" stop-color="#34d399"/></linearGradient>`
+    +`<linearGradient id="dgm-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b9dff"/><stop offset="1" stop-color="#a78bfa"/></linearGradient>`
     +`</defs><circle cx="120" cy="120" r="${R}" class="dial-track"/><path class="dial-arc" d=""/><g class="dial-ticks">${tk}</g></svg>`;
   host._cv=(cfg.value!=null?cfg.value:cfg.min);
   host._val=round2(Math.round(host._cv/cfg.step)*cfg.step);
@@ -603,13 +612,17 @@ function paintWheel(id){
   // l'arc se remplit de 0 au cercle complet puis s'arrête (pas de boucle) ; rose = dépense, vert = gain
   if(arc){
     const frac=Math.min(1,Math.abs(host._cv)/cfg.arcMax);
-    arc.style.stroke=host._cv===0?'transparent':`url(#${host._cv>0?'dgg':'dgp'}-${id})`;
-    // gain (vert) → sens anti-horaire (négatif) ; dépense (rose) → sens horaire
-    const deg=frac*360*(host._cv>0?-1:1);
-    arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,deg));
+    if(cfg.mono){ // valeur simple positive : toujours sens horaire, couleur neutre (bleu→violet)
+      arc.style.stroke=`url(#dgm-${id})`;
+      arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360));
+    }else{
+      arc.style.stroke=host._cv===0?'transparent':`url(#${host._cv>0?'dgg':'dgp'}-${id})`;
+      // gain (vert) → sens anti-horaire ; dépense (rose) → sens horaire
+      arc.setAttribute('d',frac<=0?'':arcPath(120,120,104,0,frac*360*(host._cv>0?-1:1)));
+    }
   }
   const lbl=document.getElementById(id+'-val');
-  if(lbl){lbl.innerHTML=cfg.fmt(host._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=host._val<0?'var(--red)':(host._val>0?'var(--green)':'var(--muted)');}
+  if(lbl){lbl.innerHTML=cfg.fmt(host._val);const par=lbl.closest('.wheel-val');if(par)par.style.color=cfg.mono?'var(--text)':(host._val<0?'var(--red)':(host._val>0?'var(--green)':'var(--muted)'));}
   if(cfg.onChange)cfg.onChange(host._val);
 }
 function wheelValue(id){const w=document.getElementById(id);return w&&w._val!==undefined?w._val:(WHEELS[id]?WHEELS[id].value:0)}
@@ -1096,17 +1109,21 @@ function attachUncatSwipe(id){
   },{passive:true});
 }
 // Graphique : solde réel (trait plein) jusqu'à aujourd'hui + prévisionnel (pointillés) ensuite
-let chartMode='month';
-function setChartMode(mode){chartMode=mode;renderBalanceChart();}
+let chartMode='month',chartDays={};
+function setChartMode(mode){chartMode=mode;chartTipHide();renderBalanceChart();}
 function renderBalanceChart(){
   const box=$('weekChart');if(!box)return;
   const today=new Date();today.setHours(0,0,0,0);
   const tStr=today.toISOString().slice(0,10);
+  const H=S.prevHorizon||30;
   let start,n,labelFor;
   if(chartMode==='week'){
     const dow=(today.getDay()+6)%7;
     start=new Date(today.getTime()-dow*864e5);n=7;
     labelFor=(d,i)=>['L','M','M','J','V','S','D'][i];
+  } else if(chartMode==='horizon'){
+    start=new Date(today.getTime()-3*864e5);n=H+4;
+    labelFor=d=>{const dd=d.getDate();return(dd===1||dd%7===0)?String(dd):'';};
   } else {
     start=new Date(today.getFullYear(),today.getMonth(),1);
     n=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
@@ -1125,24 +1142,50 @@ function renderBalanceChart(){
   const vals=pts.map(p=>p.bal);
   let ymin=Math.min(...vals,0),ymax=Math.max(...vals,0);if(ymin===ymax)ymax+=100;
   const pad=(ymax-ymin)*0.15||50;ymin-=pad;ymax+=pad;
-  const W=340,H=212,pL=14,pR=14,pT=24,pB=26,pw=W-pL-pR,ph=H-pT-pB;
+  const W=340,Hh=212,pL=14,pR=14,pT=24,pB=26,pw=W-pL-pR,ph=Hh-pT-pB;
   const X=i=>pL+(n<=1?0:i/(n-1)*pw),Y=v=>pT+(1-(v-ymin)/(ymax-ymin))*ph;
   const pathOf=arr=>arr.length?'M '+arr.map(p=>X(p.i).toFixed(1)+' '+Y(p.bal).toFixed(1)).join(' L '):'';
   const solid=pts.filter(p=>p.ds<=tStr),dash=pts.filter(p=>p.ds>=tStr);
   const tIdx=solid.length?solid[solid.length-1]:pts[0];
   const REAL='#60a5fa',PREV='#a78bfa';
   const dipNeg=pts.some(p=>p.bal<0);
+  // mouvements par jour (cause de la dépense) → points cliquables
+  chartDays={};
+  pts.forEach(p=>{
+    const items=[];
+    if(p.ds<=tStr)S.tx.filter(t=>t.date===p.ds).forEach(t=>items.push({note:t.note||catOf(t.cat).n,val:t.type==='in'?t.amount:-t.amount}));
+    else (S.planned||[]).filter(pl=>pl.date===p.ds).forEach(pl=>items.push({note:pl.label,val:-pl.amount}));
+    if(items.length){const net=items.reduce((a,x)=>a+x.val,0);chartDays[p.i]={day:p.day,items,net,x:X(p.i),y:Y(p.bal),bal:p.bal};}
+  });
   const areaSolid=solid.length?pathOf(solid)+` L ${X(solid[solid.length-1].i).toFixed(1)} ${Y(ymin).toFixed(1)} L ${X(solid[0].i).toFixed(1)} ${Y(ymin).toFixed(1)} Z`:'';
   const grid=[0,.5,1].map(f=>`<line x1="${pL}" y1="${(pT+f*ph).toFixed(1)}" x2="${W-pR}" y2="${(pT+f*ph).toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity=".4"/>`).join('');
   const zero=(ymin<0&&ymax>0)?`<line x1="${pL}" y1="${Y(0).toFixed(1)}" x2="${W-pR}" y2="${Y(0).toFixed(1)}" stroke="var(--red)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`:'';
-  const xlab=pts.map(p=>{const l=labelFor(p.day,p.i);return l?`<text x="${X(p.i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${l}</text>`:''}).join('');
-  const tMark=`<line x1="${X(tIdx.i).toFixed(1)}" y1="${pT}" x2="${X(tIdx.i).toFixed(1)}" y2="${H-pB}" stroke="${REAL}" stroke-width="1" stroke-dasharray="2 3" opacity=".5"/><circle cx="${X(tIdx.i).toFixed(1)}" cy="${Y(tIdx.bal).toFixed(1)}" r="5" fill="${REAL}" stroke="var(--bg)" stroke-width="2.5"/><text x="${X(tIdx.i).toFixed(1)}" y="${(Y(tIdx.bal)-11).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="${REAL}">${eur(tIdx.bal)} €</text>`;
+  const xlab=pts.map(p=>{const l=labelFor(p.day,p.i);return l?`<text x="${X(p.i).toFixed(1)}" y="${Hh-8}" text-anchor="middle" font-size="10.5" fill="var(--muted)">${l}</text>`:''}).join('');
+  const dots=Object.keys(chartDays).map(i=>{const d=chartDays[i],neg=d.net<0;return `<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="11" fill="transparent" style="cursor:pointer" onclick="chartTipShow(event,${i})"/><circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="4" fill="${neg?'#f87171':'#34d399'}" stroke="var(--bg)" stroke-width="2" style="cursor:pointer;pointer-events:none"/>`;}).join('');
+  const tMark=`<line x1="${X(tIdx.i).toFixed(1)}" y1="${pT}" x2="${X(tIdx.i).toFixed(1)}" y2="${Hh-pB}" stroke="${REAL}" stroke-width="1" stroke-dasharray="2 3" opacity=".5"/><circle cx="${X(tIdx.i).toFixed(1)}" cy="${Y(tIdx.bal).toFixed(1)}" r="5" fill="${REAL}" stroke="var(--bg)" stroke-width="2.5"/><text x="${X(tIdx.i).toFixed(1)}" y="${(Y(tIdx.bal)-11).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="700" fill="${REAL}">${eur(tIdx.bal)} €</text>`;
   const endP=dash.length>1?dash[dash.length-1]:null;
-  const endMark=endP?`<circle cx="${X(endP.i).toFixed(1)}" cy="${Y(endP.bal).toFixed(1)}" r="4" fill="${endP.bal<0?'#f87171':PREV}" stroke="var(--bg)" stroke-width="2"/><text x="${(X(endP.i)).toFixed(1)}" y="${(Y(endP.bal)-9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="${endP.bal<0?'#f87171':PREV}">${eur(endP.bal)} €</text>`:'';
-  box.innerHTML=`<div class="wc-head"><div class="wc-t">💰 Mon solde</div><div class="wc-tabs"><button class="${chartMode==='week'?'on':''}" onclick="setChartMode('week')">Semaine</button><button class="${chartMode==='month'?'on':''}" onclick="setChartMode('month')">Mois</button></div></div>
-    <svg viewBox="0 0 ${W} ${H}" class="wc-svg"><defs><linearGradient id="wcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${REAL}" stop-opacity=".28"/><stop offset="1" stop-color="${REAL}" stop-opacity="0"/></linearGradient></defs>${grid}${zero}${areaSolid?`<path d="${areaSolid}" fill="url(#wcg)"/>`:''}<path d="${pathOf(dash)}" fill="none" stroke="${dipNeg?'#f87171':PREV}" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/><path d="${pathOf(solid)}" fill="none" stroke="${REAL}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${tMark}${endMark}${xlab}</svg>
-    <div class="wc-leg"><span><i style="background:${REAL}"></i>Solde réel</span><span><i class="dsh" style="background:${PREV}"></i>Prévisionnel</span></div>`;
+  const endMark=endP?`<text x="${(X(endP.i)).toFixed(1)}" y="${(Y(endP.bal)-9).toFixed(1)}" text-anchor="end" font-size="11" font-weight="600" fill="${endP.bal<0?'#f87171':PREV}">${eur(endP.bal)} €</text>`:'';
+  box.innerHTML=`<div class="wc-head"><div class="wc-t">💰 Mon solde</div><div class="wc-tabs"><button class="${chartMode==='week'?'on':''}" onclick="setChartMode('week')">Semaine</button><button class="${chartMode==='month'?'on':''}" onclick="setChartMode('month')">Mois</button><button class="${chartMode==='horizon'?'on':''}" onclick="setChartMode('horizon')">Prévu</button></div></div>
+    <svg id="balSvg" viewBox="0 0 ${W} ${Hh}" class="wc-svg"><defs><linearGradient id="wcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${REAL}" stop-opacity=".28"/><stop offset="1" stop-color="${REAL}" stop-opacity="0"/></linearGradient></defs>${grid}${zero}${areaSolid?`<path d="${areaSolid}" fill="url(#wcg)"/>`:''}<path d="${pathOf(dash)}" fill="none" stroke="${dipNeg?'#f87171':PREV}" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round" stroke-linejoin="round"/><path d="${pathOf(solid)}" fill="none" stroke="${REAL}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${tMark}${endMark}${dots}${xlab}</svg>
+    <div class="wc-leg"><span><i style="background:${REAL}"></i>Solde réel</span><span><i class="dsh" style="background:${PREV}"></i>Prévisionnel</span><span style="opacity:.8">● touche un point</span></div>`;
 }
+function chartTipShow(ev,i){
+  ev.stopPropagation();
+  const d=chartDays[i];if(!d){return}
+  let tip=$('chartTip');if(!tip){tip=document.createElement('div');tip.id='chartTip';document.body.appendChild(tip);}
+  const dl=d.day.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+  const rows=d.items.map(it=>`<div class="ctrow"><span class="ctn">${it.val<0?'🔴':'🟢'} ${it.note}</span><span class="cta" style="color:${it.val<0?'var(--red)':'var(--green)'}">${it.val<0?'−':'+'}${eur(Math.abs(it.val))} €</span></div>`).join('');
+  tip.innerHTML=`<div class="cth">${dl}</div>${rows}<div class="ctb">Solde ce jour : <b>${eur(d.bal)} €</b></div>`;
+  const svg=$('balSvg');if(!svg)return;const r=svg.getBoundingClientRect(),sc=r.width/340;
+  tip.style.display='block';const tw=tip.offsetWidth,th=tip.offsetHeight;
+  let left=r.left+d.x*sc-tw/2,top=r.top+d.y*sc-th-14;
+  left=Math.max(8,Math.min(innerWidth-tw-8,left));
+  if(top<8)top=r.top+d.y*sc+16;
+  tip.style.left=left+'px';tip.style.top=top+'px';
+  requestAnimationFrame(()=>tip.classList.add('on'));
+  setTimeout(()=>document.addEventListener('click',chartTipHide,{once:true}),0);
+}
+function chartTipHide(){const tip=$('chartTip');if(tip){tip.classList.remove('on');setTimeout(()=>{if(tip&&!tip.classList.contains('on'))tip.style.display='none';},200);}}
 
 // ===== RÉGLAGES =====
 function openSettings(){
@@ -1216,7 +1259,7 @@ function openParams(){
 
     <div class="sec-t" style="margin-top:22px">🔭 Prévisionnel</div>
     <div class="param-v" style="margin-bottom:6px">Jusqu'où l'app regarde devant pour le solde prévisionnel et l'alerte de découvert.</div>
-    ${wheelMarkup('horizonWheel',{min:7,max:365,step:1,value:S.prevHorizon||30,perTurn:30,arcMax:90,fmt:v=>`${v} <small>jours · ${horizonLabel(v)}</small>`,onChange:v=>{S.prevHorizon=v;clearTimeout(_hzT);_hzT=setTimeout(()=>{save();render();},200);}})}
+    ${wheelMarkup('horizonWheel',{min:7,max:365,step:1,value:S.prevHorizon||30,perTurn:30,arcMax:90,mono:true,fmt:v=>`${v} <small>jours · ${horizonLabel(v)}</small>`,onChange:v=>{S.prevHorizon=v;clearTimeout(_hzT);_hzT=setTimeout(()=>{save();render();},200);}})}
     <div class="cal-chips" style="margin-top:10px">${[[7,'1 sem.'],[30,'1 mois'],[90,'3 mois'],[180,'6 mois']].map(p=>`<button onclick="setWheel('horizonWheel',${p[0]})">${p[1]}</button>`).join('')}</div>
 
     <div class="sec-t" style="margin-top:22px">💾 Mes données</div>
