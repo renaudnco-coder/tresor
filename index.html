@@ -654,29 +654,25 @@ function finishOnboarding(){
 // ===== AJOUT MOUVEMENT =====
 let addType='out',addCat='courses';
 function openAdd(){
-  addType='out';addCat='courses';
+  addCat='courses';
   $('sheetBody').innerHTML=`
     <h2>Ajouter un mouvement</h2>
-    <div class="lead">Note une dépense ou un revenu en 2 secondes.</div>
-    <div class="toggle">
-      <button id="tg-out" class="on out" onclick="setType('out')">– Dépense</button>
-      <button id="tg-in" onclick="setType('in')">+ Revenu</button>
-    </div>
-    ${wheelMarkup('addWheel',{min:0,step:1,value:0,perTurn:60,arcMax:200,money:true,fmt:v=>v>0?(eur(v)+' <small>€</small>'):'<small>0 €</small>',onChange:()=>{}})}
-    <div id="catWrap" style="margin-top:14px"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie</label><div class="cats" id="catGrid"></div></div>
+    <div class="lead">Tourne la molette : <b style="color:var(--red)">🔴 dépense</b> vers la droite, <b style="color:var(--green)">🟢 revenu</b> vers la gauche.</div>
+    ${wheelMarkup('addWheel',{min:-1e9,max:1e9,step:1,value:0,perTurn:60,arcMax:200,invert:true,money:true,fmt:v=>v===0?'<small>0 €</small>':((v<0?'−':'+')+eur(Math.abs(v))+' <small>€</small>'),onChange:v=>{const cw=$('catWrap');if(cw)cw.style.display=v>0?'none':'block';}})}
+    <div id="catWrap" style="margin-top:14px"><label style="font-size:13px;color:var(--muted);display:block;margin-bottom:8px">Catégorie (dépense)</label><div class="cats" id="catGrid"></div></div>
     <div class="field"><input id="addNote" type="text" placeholder="Note (ex : Frais BNP)"></div>
     <button class="btn btn-pri" onclick="saveTx()">Enregistrer</button>`;
   renderCats();openSheet();initWheel('addWheel');
 }
-function setType(t){addType=t;$('tg-out').className=t==='out'?'on out':'';$('tg-in').className=t==='in'?'on in':'';$('catWrap').style.display=t==='out'?'block':'none'}
 function renderCats(){$('catGrid').innerHTML=CATS.map(c=>`<div class="cat ${c.id===addCat?'on':''}" onclick="pickCat('${c.id}')"><div class="e">${c.e}</div><div class="n">${c.n}</div></div>`).join('')}
 function pickCat(id){addCat=id;renderCats()}
 function saveTx(){
-  const amt=wheelValue('addWheel');if(!amt||amt<=0){toast('⚠️','Tourne la roulette pour entrer un montant.');return}
-  S.tx.unshift({id:Date.now(),date:todayStr(),type:addType,amount:amt,cat:addType==='out'?addCat:'revenu',note:$('addNote').value.trim()});
-  S.solde+=addType==='in'?amt:-amt;award(addType==='out'?5:3);bumpStreak();
+  const v=wheelValue('addWheel');if(!v){toast('⚠️','Tourne la molette pour entrer un montant.');return}
+  const out=v<0,amt=Math.abs(v);
+  S.tx.unshift({id:Date.now(),date:todayStr(),type:out?'out':'in',amount:amt,cat:out?addCat:'revenu',note:$('addNote').value.trim()});
+  S.solde+=out?-amt:amt;award(out?5:3);bumpStreak();
   if(!hasBadge('first'))giveBadge('first');save();closeSheet();render();
-  toast(addType==='out'?'✅':'💰',addType==='out'?'Dépense notée. +5 pts':'Revenu ajouté. +3 pts');
+  toast(out?'✅':'💰',out?'Dépense notée. +5 pts':'Revenu ajouté. +3 pts');
 }
 
 // ===== TIRELIRE / RÉSISTER =====
@@ -1465,7 +1461,7 @@ function parseVoice(txt){
   if(amt>0)toast('🎤',`Compris : ${eur2(amt)} € — ${note}. Vérifie et valide !`);
   else toast('🎤','Je n\'ai pas saisi le montant, complète-le.');
 }
-function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)setWheel('addWheel',amt);$('addNote').value=note||'';},120)}
+function openAddPrefill(amt,cat,note){openAdd();setTimeout(()=>{addCat=cat;renderCats();if(amt>0)setWheel('addWheel',-amt);$('addNote').value=note||'';},120)}
 
 // ===== SCAN DE TICKET (photo → Claude vision) =====
 function fileToResizedBase64(file,maxDim){
